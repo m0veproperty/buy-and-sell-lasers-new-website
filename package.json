@@ -1,0 +1,27 @@
+{
+  "name": "buy-and-sell-lasers",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "next": "16.4.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.183.0",
+    "playwright": "^1.58.0",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.3"
+  }
+}
