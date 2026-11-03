@@ -8,6 +8,7 @@ import './direction-v4.css';
 import './interior.css';
 import './account.css';
 import './category.css';
+import './aura.css';
 export const metadata: Metadata = {
  title: 'Buy & Sell Lasers | Your next laser. A clearer choice.',
  description: 'Explore pre-owned laser and aesthetic equipment. Inspect real listings, compare the details and connect directly with sellers.',

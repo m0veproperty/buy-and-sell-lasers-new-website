@@ -1,0 +1,22 @@
+/* Continuous ambient motion explicitly requested for the homepage. */
+.aura-atmosphere{background:radial-gradient(ellipse at 50% 43%,#fff 12%,#f3f7ff 49%,#d9e9fd 100%)}
+.aura-atmosphere:after{inset:13% 14% 20%;background:radial-gradient(ellipse,#ffffffb8 15%,#ffffff40 48%,transparent 73%)}
+.aura-parallax{position:absolute;inset:-8%;transform:translate(var(--drift-x,0px),var(--drift-y,0px));transition:transform 1.8s ease-out}
+.aura-cloud{position:absolute;will-change:transform,opacity;pointer-events:none}
+.aura-cloud-left{left:-20%;top:-25%;width:95%;height:120%;background:radial-gradient(ellipse at 36% 46%,#9ccaff80 0%,#c0e2ff60 28%,#d7e9ff30 48%,transparent 70%);animation:aura-left 22s ease-in-out infinite alternate}
+.aura-cloud-right{right:-20%;top:-15%;width:95%;height:125%;background:radial-gradient(ellipse at 65% 50%,#a9d5ff8c 0%,#c3ddff65 30%,#e3eaff35 49%,transparent 71%);animation:aura-right 27s ease-in-out infinite alternate;animation-delay:-11s}
+.aura-cloud-bottom{left:-15%;bottom:-55%;width:130%;height:110%;background:radial-gradient(ellipse at 48% 60%,#7eb9fc85 0%,#aed4ff66 32%,#d1e5ff35 53%,transparent 72%);animation:aura-bottom 19s ease-in-out infinite alternate;animation-delay:-7s}
+.aura-bloom{position:absolute;inset:13% 20% 16%;border-radius:50%;background:radial-gradient(ellipse,#fff9,transparent 70%);animation:aura-breathe 16s ease-in-out infinite alternate;will-change:transform,opacity}
+.aura-silk{position:absolute;inset:-7%;width:114%;height:114%;opacity:.65;transform:translateY(var(--scroll-shift,0px));overflow:visible}
+.aura-ribbon{transform-box:fill-box;transform-origin:center;will-change:transform,opacity}
+.aura-ribbon-one{animation:aura-silk-one 25s ease-in-out infinite alternate;animation-delay:-6s}
+.aura-ribbon-two{animation:aura-silk-two 31s ease-in-out infinite alternate;animation-delay:-17s}
+.aura-atmosphere[data-active=false] *,.aura-atmosphere[data-visible=false] *{animation-play-state:paused!important}
+@keyframes aura-left{from{transform:translate(-3%,-2%) scale(.98);opacity:.65}to{transform:translate(14%,12%) scale(1.1);opacity:1}}
+@keyframes aura-right{from{transform:translate(7%,-5%) scale(1.08);opacity:1}to{transform:translate(-12%,11%) scale(.96);opacity:.65}}
+@keyframes aura-bottom{from{transform:translate(-7%,4%) scale(1.05);opacity:.55}to{transform:translate(7%,-13%) scale(1.12);opacity:.95}}
+@keyframes aura-breathe{from{transform:scale(.95);opacity:.65}to{transform:scale(1.15);opacity:1}}
+@keyframes aura-silk-one{from{transform:translate(-2%,2%);opacity:.5}to{transform:translate(3%,-4%);opacity:.9}}
+@keyframes aura-silk-two{from{transform:translate(3%,3%);opacity:.35}to{transform:translate(-3%,-2%);opacity:.7}}
+@media(max-width:750px){.aura-cloud-left,.aura-cloud-right{width:140%}.aura-cloud-left{left:-70%}.aura-cloud-right{right:-70%}.aura-bloom{inset:15% 8% 22%}.aura-silk{width:160%;left:-30%;opacity:.45}}
+@media(prefers-reduced-motion:reduce){.aura-atmosphere *{animation:none!important;transition:none!important;will-change:auto}.aura-parallax,.aura-silk{transform:none}.aura-cloud-left,.aura-cloud-right{opacity:.75}.aura-cloud-bottom{opacity:.65}}
