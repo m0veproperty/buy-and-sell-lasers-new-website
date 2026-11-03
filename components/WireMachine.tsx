@@ -56,21 +56,68 @@ export default function WireMachine({progress}:{progress:number}){
    const coilPoints=Array.from({length:180},(_,i)=>new T.Vector3(Math.cos(i*.25)*.24,-.65+i*.008,Math.sin(i*.25)*.24));
    model.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(coilPoints),180,.012,5,false),blue));
    const scan=new T.Mesh(new T.TorusGeometry(1.35,.009,6,96),blue);scan.rotation.x=Math.PI/2;scene.add(scan);
+   // A clinical trolley exterior dissolves into the diagnostic wireframe on scroll.
+   const enamel=new T.MeshStandardMaterial({color:0xe6f0fa,metalness:.32,roughness:.3,transparent:true,opacity:.94});
+   const trim=new T.MeshStandardMaterial({color:0x15375e,metalness:.65,roughness:.27});
+   const aluminium=new T.MeshStandardMaterial({color:0x8ea9bf,metalness:.8,roughness:.24});
+   const rubber=new T.MeshStandardMaterial({color:0x152334,roughness:.8});
+   const display=new T.MeshStandardMaterial({color:0x072b50,metalness:.3,roughness:.15,emissive:0x103d68,emissiveIntensity:.25});
+   const indicator=new T.MeshStandardMaterial({color:0x35c9ed,emissive:0x159acb,emissiveIntensity:1.2});
+   box(1.48,2.08,1.1,0,-.15,0,enamel,.19);
+   box(1.26,.62,1.02,0,-1.4,.04,trim,.12);
+   box(1.86,.16,1.51,0,-1.8,0,aluminium,.06);
+   const face=new T.Mesh(new RoundedBoxGeometry(1.69,.94,.99,5,.16),enamel);head.add(face);
+   const lcd=new T.Mesh(new RoundedBoxGeometry(1.39,.66,.035,3,.06),display);lcd.position.set(0,.02,.54);head.add(lcd);
+   // Illuminated interface tiles and pulse graph, without clinical treatment claims.
+   for(let i=0;i<3;i++){const tile=new T.Mesh(new T.BoxGeometry(.28,.1,.012),indicator);tile.position.set(-.43+i*.43,-.19,.57);head.add(tile);}
+   const graphPoints=Array.from({length:32},(_,i)=>new T.Vector3(-.56+i*.036,.1+Math.sin(i*.65)*.075,.575));
+   const graph=new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(graphPoints),48,.008,5,false),indicator);head.add(graph);
+   const cylinder=(radius:number,length:number,x:number,y:number,z:number,material:InstanceType<typeof T.Material>)=>{const m=new T.Mesh(new T.CylinderGeometry(radius,radius,length,24),material);m.position.set(x,y,z);model.add(m);return m;};
+   for(const x of [-.7,.7])for(const z of [-.53,.53]){
+    cylinder(.055,.19,x,-1.91,z,aluminium);
+    const tyre=cylinder(.172,.14,x,-2,z,rubber);tyre.rotation.z=Math.PI/2;
+    const hub=cylinder(.085,.15,x,-2,z,aluminium);hub.rotation.z=Math.PI/2;
+   }
+   // Front controls, key switch, recessed vents and fasteners.
+   const stop=cylinder(.085,.055,.43,.69,.59,new T.MeshStandardMaterial({color:0xb83939,roughness:.45}));stop.rotation.x=Math.PI/2;
+   const key=cylinder(.045,.045,.19,.69,.59,aluminium);key.rotation.x=Math.PI/2;
+   box(.012,.06,.035,.19,.69,.625,trim,.003);
+   for(let i=0;i<10;i++)box(.65,.024,.018,0,-.75-i*.055,.56,trim,.006);
+   for(const x of [-.58,.58])for(const y of [-.98,.55]){const screw=cylinder(.022,.018,x,y,.56,aluminium);screw.rotation.x=Math.PI/2;}
+   for(let i=0;i<12;i++)box(.025,.52,.018,-.39+i*.071,-.52,-.56,trim,.006);
+   // Rear handle and paired service connectors.
+   const handlePath=new T.CatmullRomCurve3([new T.Vector3(-.56,.65,-.54),new T.Vector3(-.55,.85,-.76),new T.Vector3(.55,.85,-.76),new T.Vector3(.56,.65,-.54)]);
+   model.add(new T.Mesh(new T.TubeGeometry(handlePath,32,.045,10,false),aluminium));
+   for(const x of [-.25,.25]){const socket=cylinder(.085,.07,x,-1.1,-.56,aluminium);socket.rotation.x=Math.PI/2;}
+   const grip=new T.Mesh(new T.CylinderGeometry(.105,.13,.49,24),enamel);handpiece.add(grip);
+   const treatmentHead=new T.Mesh(new RoundedBoxGeometry(.32,.22,.26,3,.045),aluminium);treatmentHead.position.y=.32;handpiece.add(treatmentHead);
+   const sapphire=new T.Mesh(new T.BoxGeometry(.23,.025,.17),indicator);sapphire.position.y=.44;handpiece.add(sapphire);
+   beam.visible=false;
+   // Cooling radiator fins and optical resonator remain visible in the exploded view.
+   for(let i=0;i<15;i++)box(.73,.023,.48,0,-.72+i*.035,-.14,aluminium,.004);
+   const resonator=cylinder(.105,.85,-.32,.3,0,aluminium);resonator.rotation.z=Math.PI/2;
    const originals=model.children.map(child=>child.position.clone());
    el.appendChild(renderer.domElement);el.dataset.status='ready';
-   let raf=0;const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+   let raf=0,lastTime=0,idleTime=0,inView=true;const reduced=matchMedia('(prefers-reduced-motion: reduce)');
    const render=()=>{if(stopped)return;renderer.render(scene,camera);el.dataset.angle=model.rotation.y.toFixed(2);};
    const resize=()=>{const w=el.clientWidth,h=el.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();render();};
    const setProgress=(p:number)=>{
     const turn=Math.min(1,Math.max(0,(p-.18)/.72));
-    model.rotation.y=-.45+turn*Math.PI*1.65;
+    model.rotation.y=-.45+turn*Math.PI*1.65+(reduced.matches?0:Math.sin(idleTime*.28)*.65*Math.max(0,1-p/.35));
+    enamel.opacity=.94*(1-Math.min(1,Math.max(0,(p-.08)/.38)));
+    enamel.depthWrite=enamel.opacity>.8;
     const explode=Math.max(0,Math.min(1,(p-.57)/.3));
     model.children.forEach((child,i)=>{child.position.copy(originals[i]);child.position.y+=Math.sign(originals[i].y)*explode*.48;if(Math.abs(originals[i].x)>.7)child.position.x+=Math.sign(originals[i].x)*explode*.25;});
     model.scale.setScalar(1-explode*.1);scan.position.y=-2.1+turn*4.4;scan.visible=p>.22&&p<.88;render();
    };
-   control.current=setProgress;
+   const tick=(time:number)=>{raf=0;if(stopped||reduced.matches||document.hidden||!inView||latest.current>=.35)return;if(lastTime)idleTime+=Math.min(.05,(time-lastTime)/1000);lastTime=time;setProgress(latest.current);raf=requestAnimationFrame(tick);};
+   const resume=()=>{lastTime=0;if(!raf&&!reduced.matches&&!document.hidden&&inView&&latest.current<.35)raf=requestAnimationFrame(tick);};
+   control.current=(p)=>{setProgress(p);resume();};
+   const visibility=new IntersectionObserver(entries=>{inView=entries[0].isIntersecting;if(inView)resume();});visibility.observe(el);
+   const preference=()=>{setProgress(latest.current);resume();};
+   reduced.addEventListener('change',preference);document.addEventListener('visibilitychange',resume);resume();
    const observer=new ResizeObserver(resize);observer.observe(el);resize();setProgress(latest.current);
-   cleanup=()=>{cancelAnimationFrame(raf);observer.disconnect();control.current=null;scene.traverse(o=>{if(o instanceof T.Mesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});renderer.dispose();renderer.domElement.remove();};
+   cleanup=()=>{cancelAnimationFrame(raf);observer.disconnect();visibility.disconnect();reduced.removeEventListener('change',preference);document.removeEventListener('visibilitychange',resume);control.current=null;scene.traverse(o=>{if(o instanceof T.Mesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});renderer.dispose();renderer.domElement.remove();};
   }).catch(()=>{el.dataset.status='fallback';});
   return()=>{stopped=true;cleanup();};
  },[]);
