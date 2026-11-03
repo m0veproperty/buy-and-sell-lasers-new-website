@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
+    "dev": "next dev --webpack --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:backend": "node --test --test-isolation=none tests/*.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -23,5 +24,8 @@
     "playwright": "^1.58.0",
     "sharp": "^0.35.5",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }
