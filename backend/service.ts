@@ -55,10 +55,34 @@ export class Marketplace {
     if(!row)throw new ApiError(401,'Sign in to continue.');return row;
   }
   logout(token:string|undefined){if(token)this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hash(token));}
+  isOperator(user:User){return Boolean(this.db.prepare('SELECT 1 FROM listing_operators WHERE user_id=?').get(user.id));}
+  private requireOperator(user:User){
+    if(!this.isOperator(user))throw new ApiError(403,'Operator access is required.');
+  }
+  publishedForOperators(user:User){
+    this.requireOperator(user);
+    const rows=this.db.prepare(`SELECT l.*,u.email AS seller_email,
+      EXISTS(SELECT 1 FROM listings other
+        WHERE other.id<>l.id AND other.state='published' AND other.expires_at>l.updated_at
+        AND lower(json_extract(other.data,'$.make'))=lower(json_extract(l.data,'$.make'))
+        AND lower(json_extract(other.data,'$.model'))=lower(json_extract(l.data,'$.model'))
+        AND lower(json_extract(other.data,'$.location'))=lower(json_extract(l.data,'$.location'))) AS similar
+      FROM listings l JOIN users u ON u.id=l.owner_id
+      JOIN listing_payments p ON p.listing_id=l.id
+      WHERE l.state='published' AND l.expires_at>? AND p.capture_id IS NOT NULL
+      ORDER BY l.updated_at DESC LIMIT 100`).all(Date.now()) as (Row&{seller_email:string;similar:number})[];
+    return rows.map(row=>{
+      const listing=this.present(row);
+      const flags:string[]=[];
+      if(row.similar)flags.push('Another listing has the same make, model and location.');
+      if(!listing.data.history)flags.push('The seller did not provide service or ownership history.');
+      return {...listing,sellerEmail:row.seller_email,flags};
+    });
+  }
   private row(id:string){const row=this.db.prepare('SELECT * FROM listings WHERE id=?').get(id) as Row|undefined;if(!row)throw new ApiError(404,'Listing not found.');return row;}
   owned(user:User,id:string){const row=this.row(id);if(row.owner_id!==user.id)throw new ApiError(404,'Listing not found.');return row;}
   private present(row:Row){return {id:row.id,data:JSON.parse(row.data) as Machine,state:row.state,packageId:row.package_id,feePence:row.fee_pence,photos:this.db.prepare('SELECT id FROM photos WHERE listing_id=? ORDER BY created_at').all(row.id).map(p=>String(p.id)),updatedAt:row.updated_at};}
-  mine(user:User){return (this.db.prepare('SELECT * FROM listings WHERE owner_id=? ORDER BY updated_at DESC').all(user.id) as Row[]).map(r=>this.present(r));}
+  mine(user:User){return (this.db.prepare('SELECT * FROM listings WHERE owner_id=? ORDER BY updated_at DESC').all(user.id) as Row[]).map(r=>({...this.present(r),checkoutStarted:Boolean(this.db.prepare('SELECT 1 FROM listing_payments WHERE listing_id=?').get(r.id))}));}
   save(user:User,input:Record<string,unknown>,id?:string){
     const data=validateMachine(input),now=Date.now();
     if(id){const row=this.owned(user,id);if(row.state!=='draft')throw new ApiError(409,'Return this listing to draft before editing.');this.db.prepare('UPDATE listings SET data=?,updated_at=? WHERE id=?').run(JSON.stringify(data),now,id);}
@@ -75,10 +99,15 @@ export class Marketplace {
     this.db.prepare("UPDATE listings SET state='awaiting_payment',package_id=?,fee_pence=?,updated_at=? WHERE id=?").run(pack.id,quote.amountPence,Date.now(),id);
     return this.present(this.row(id));
   }
-  returnToDraft(user:User,id:string){const row=this.owned(user,id);if(!['draft','awaiting_payment'].includes(row.state))throw new ApiError(409,'This listing cannot be returned to draft.');this.db.prepare("UPDATE listings SET state='draft',package_id=NULL,fee_pence=NULL,updated_at=? WHERE id=?").run(Date.now(),id);return this.present(this.row(id));}
+  returnToDraft(user:User,id:string){const row=this.owned(user,id);if(this.db.prepare('SELECT 1 FROM listing_payments WHERE listing_id=?').get(id))throw new ApiError(409,'Checkout has started for this listing.');if(!['draft','awaiting_payment'].includes(row.state))throw new ApiError(409,'This listing cannot be returned to draft.');this.db.prepare("UPDATE listings SET state='draft',package_id=NULL,fee_pence=NULL,updated_at=? WHERE id=?").run(Date.now(),id);return this.present(this.row(id));}
   addPhoto(user:User,id:string,bytes:Uint8Array){const row=this.owned(user,id);if(row.state!=='draft')throw new ApiError(409,'Only draft photographs can be changed.');const pack=packageForPrice(Math.round(Number(JSON.parse(row.data).askingPrice)*100));const n=this.db.prepare('SELECT count(*) AS n FROM photos WHERE listing_id=?').get(id) as {n:number};if(pack.photoLimit!==null&&n.n>=pack.photoLimit)throw new ApiError(400,'Photograph limit reached.');const photoId=randomUUID();this.db.prepare('INSERT INTO photos VALUES(?,?,?,?)').run(photoId,id,bytes,Date.now());return photoId;}
   removePhoto(user:User,id:string,photoId:string){if(this.owned(user,id).state!=='draft')throw new ApiError(409,'Only draft photographs can be changed.');this.db.prepare('DELETE FROM photos WHERE id=? AND listing_id=?').run(photoId,id);}
   photo(photoId:string,user?:User){const p=this.db.prepare('SELECT p.bytes,l.owner_id,l.state,l.expires_at FROM photos p JOIN listings l ON l.id=p.listing_id WHERE p.id=?').get(photoId) as {bytes:Uint8Array;owner_id:string;state:string;expires_at:number}|undefined;if(!p||(p.owner_id!==user?.id&&!(p.state==='published'&&p.expires_at>Date.now())))throw new ApiError(404,'Photograph not found.');return p.bytes;}
+  publishedListing(id:string){
+    const row=this.db.prepare("SELECT * FROM listings WHERE id=? AND state='published' AND expires_at>?")
+      .get(id,Date.now()) as Row|undefined;
+    return row?this.present(row):undefined;
+  }
   published(){return (this.db.prepare("SELECT * FROM listings WHERE state='published' AND expires_at>? ORDER BY created_at DESC").all(Date.now()) as Row[]).map(r=>this.present(r));}
   enquire(id:string,input:Record<string,unknown>){const row=this.row(id);if(row.state!=='published'||!row.expires_at||row.expires_at<=Date.now())throw new ApiError(404,'This listing is not accepting enquiries.');const name=text(input.name,'Name',120),address=email(input.email),message=text(input.message,'Message',5000);const enquiryId=randomUUID();this.db.prepare('INSERT INTO enquiries VALUES(?,?,?,?,?,?)').run(enquiryId,id,name,address,message,Date.now());return {id:enquiryId};}
   inbox(user:User){return this.db.prepare('SELECT e.*,l.data FROM enquiries e JOIN listings l ON l.id=e.listing_id WHERE l.owner_id=? ORDER BY e.created_at DESC').all(user.id).map(r=>({...r,data:JSON.parse(String(r.data)) as Machine}));}

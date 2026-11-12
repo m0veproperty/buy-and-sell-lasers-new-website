@@ -1,6 +1,6 @@
 # Local marketplace backend
 
-This implementation is independent of WordPress, Supabase and Stripe. It is a working local backend, not a production service deployment.
+The Next.js marketplace backend currently runs with local SQLite. Its seller accounts, listings and PayPal orders are independent of the WordPress marketplace.
 
 ## Run
 
@@ -8,7 +8,7 @@ Use Node 24. `npm run dev` serves the application; `npm run build -- --webpack` 
 
 The app now requires a Next.js server; static export was removed. Before a later Vercel deployment, clear any legacy `out` output-directory override and use the Next.js framework preset.
 
-No credentials or external services are required. `MARKETPLACE_DB_PATH` optionally overrides the database location. `APP_ORIGIN` can set the canonical mutation origin when running behind a trusted proxy. Without it, mutations must match the request's protocol and Host. Do not use this local adapter on Vercel: `getStore()` deliberately refuses that runtime, since ephemeral disk is not durable account storage.
+Account and draft features run without credentials. PayPal checkout requires sandbox configuration. `MARKETPLACE_DB_PATH` optionally overrides the database location. `APP_ORIGIN` can set the canonical mutation origin when running behind a trusted proxy. Without it, mutations must match the request's protocol and Host. Do not use this local adapter on Vercel: `getStore()` deliberately refuses that runtime, since ephemeral disk is not durable account storage.
 
 ## Boundaries
 
@@ -36,21 +36,30 @@ All paths below start with `/api/marketplace/`.
 | GET | photos/:id | Private draft or published photo |
 | POST | listings/:id/submit | Validate saved draft and hold for payment |
 | POST | listings/:id/draft | Return unpaid submission to draft |
+| POST | listings/:id/checkout, listings/:id/capture | Start PayPal checkout and reconcile the seller’s return |
+| POST | paypal/webhook | Verify PayPal signatures and process approvals and completed captures |
+| GET | operator/listings | Inspect live paid listings and their authenticity flags |
+| POST | notifications/retry | Retry up to ten queued publication emails with a bearer secret |
 | POST | enquiries/:listingId | Store buyer enquiry for a live listing |
 | POST | contact | Store a general contact record (UI still prepares email) |
 
-`draft → awaiting_payment` is the only submission transition currently exposed. There is deliberately no payment-success simulation or public publish endpoint. Submissions require a photo and derive the package from the stored asking price. Editing returns an unpaid submission to draft. Draft-editor changes must be saved before submission. The user-supplied owner, fee or state is never trusted.
+Saved drafts require at least one photo before submission. The server derives the GBP fee from the asking price. Checkout holds the listing and its quote in place. A verified and matching completed PayPal capture publishes the listing for its package duration in the Next.js shop. In the same transaction the app queues one email to info@buyandselllasers.com and az@wiwy.com. The operator portal flags matching make, model and location and missing service or ownership history for follow-up. No OpenAI credentials are required for this workflow.
 
-The existing six catalogue entries remain source examples without local seller ownership. They are not assigned to fabricated accounts; their current source-site handoff remains until real seller ownership/inventory migration is handled. Public database catalogue APIs and enquiries can be tested with isolated published fixtures, but the production catalogue is not yet sourced from them.
+## Local operator and PayPal sandbox setup
 
-## Final integration work
+1. Run the app and create the operator’s account in `/account`. Confirm control of that account before granting access. In the local database, look up its ID with `SELECT id, email FROM users;`, then provision that exact ID with a parameterized `INSERT INTO listing_operators(user_id) VALUES (?);`. Remove the grant with `DELETE FROM listing_operators WHERE user_id=?;`. Sign in and open `/operator`.
+2. Set `APP_ORIGIN` to the HTTPS origin used for both the seller’s browser and the PayPal webhook. Point a test HTTPS reverse proxy at the local app. Set `PAYPAL_MODE=sandbox` and provide `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MERCHANT_ID` and `PAYPAL_WEBHOOK_ID` via server-side environment configuration.
+3. Configure `RESEND_API_KEY` and `MARKETPLACE_EMAIL_FROM` with a verified sender. PayPal webhook retries can reattempt a queued email after a delivery error. To retry manually, send a bearer token matching `MARKETPLACE_NOTIFICATION_SECRET` to `POST /api/marketplace/notifications/retry`. For sandbox tests, mock email delivery or leave the sender unconfigured to avoid notifying the production recipients.
+4. Register `/api/marketplace/paypal/webhook` on the same PayPal app for `CHECKOUT.ORDER.APPROVED` and `PAYMENT.CAPTURE.COMPLETED`. Use the sandbox buyer account to exercise the redirect and webhook, including a buyer who closes the tab after approving payment.
+5. Confirm the captured GBP amount, public listing and seller enquiry inbox. Confirm that only one publication email was queued.
 
-1. Replace the SQLite persistence boundary with the selected durable hosting adapter and migrate data. No provider is chosen or required now.
-2. Connect email verification, password recovery and notifications; add retryable delivery records. The current inbox stores enquiries without claiming an email was sent.
-3. Connect the chosen listing payment provider. Create payments from the server-derived quote and persist immutable order records. Verify signed payment events, expected amount/currency and listing ownership; deduplicate events transactionally. Only confirmed payments can advance to review. Reconcile refunds/disputes and listing expiry.
-4. Add operator moderation and publication, then wire the public catalogue/product pages to approved database records. Decide operator roles explicitly; sellers must not grant themselves those roles.
-5. Confirm package/VAT terms and update operator policies for the final processors. Test real account recovery, payment failures/retries and data migration before production.
+## Before production
+
+1. Replace local SQLite with a durable hosted database and migrate any accounts, listings and images that should carry over. The Vercel deployment currently blocks the local persistence adapter.
+2. If existing WordPress inventory will be migrated, establish its seller ownership before import. The existing source catalogue entries retain their existing contact paths.
+3. Confirm seller verification, account recovery, refund, reversal, dispute and checkout-expiry handling, and the listing terms before accepting live payments. The current checkout retains its original PayPal order for retries, so expired orders require intervention.
+4. After sandbox verification, configure the intended live PayPal merchant and webhook in the hosting project’s server-side environment.
 
 ## Verification
 
-`npm run test:backend` checks fee boundaries, invalid inputs, authentication/session expiry, ownership, photos, payment holding state, enquiries and rate limits. Run on an isolated database. HTTP smoke evidence and screenshots are in `outputs/` for this work session. Browser registration, saved editor, refresh and payment hold were checked; the photo endpoint was tested over HTTP because the automation extension lacks local file access.
+`npm run test:backend` checks fee boundaries, invalid inputs, authentication/session expiry, ownership, photos, payment holding state, enquiries and rate limits. Run on an isolated database. Payment tests mock PayPal responses. Run a sandbox checkout before enabling live payments.

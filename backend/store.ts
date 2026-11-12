@@ -18,7 +18,23 @@ export function openStore(filename:string) {
     CREATE INDEX IF NOT EXISTS enquiry_listing ON enquiries(listing_id);
     CREATE TABLE IF NOT EXISTS contact_messages(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL,topic TEXT NOT NULL,message TEXT NOT NULL,created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,hits INTEGER NOT NULL,reset_at INTEGER NOT NULL);
-    PRAGMA user_version=1;
+    CREATE TABLE IF NOT EXISTS listing_operators(user_id TEXT PRIMARY KEY REFERENCES users(id));
+    CREATE TABLE IF NOT EXISTS listing_payments(
+      listing_id TEXT PRIMARY KEY REFERENCES listings(id),
+      request_id TEXT NOT NULL UNIQUE,
+      amount_pence INTEGER NOT NULL CHECK(amount_pence > 0),
+      paypal_order_id TEXT UNIQUE,
+      approval_url TEXT,
+      capture_id TEXT UNIQUE
+    );
+    CREATE TABLE IF NOT EXISTS listing_publication_emails(
+      listing_id TEXT PRIMARY KEY REFERENCES listings(id),
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      sent_at INTEGER,
+      provider_id TEXT
+    );
+    PRAGMA user_version=2;
   `);
   return db;
 }
