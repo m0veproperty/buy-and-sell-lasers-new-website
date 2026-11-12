@@ -4,7 +4,8 @@ const recipients=['info@buyandselllasers.com','az@wiwy.com'];
 
 export async function sendPublicationEmail(service:Marketplace,listingId:string){
   const row=await service.db.get<{subject:string;body:string;sent_at:number|null}>(
-    'SELECT subject,body,sent_at FROM listing_publication_emails WHERE listing_id=?',listingId);
+    `SELECT e.subject,e.body,e.sent_at FROM listing_publication_emails e
+      JOIN listings l ON l.id=e.listing_id WHERE e.listing_id=? AND l.state='published' AND l.expires_at>?`,listingId,Date.now());
   if(!row||row.sent_at!==null)return;
   const {RESEND_API_KEY:key,MARKETPLACE_EMAIL_FROM:from}=process.env;
   if(!key||!from)throw new ApiError(503,'Publication email is awaiting sender configuration.');
@@ -25,7 +26,8 @@ export async function sendPublicationEmail(service:Marketplace,listingId:string)
 
 export async function retryPublicationEmails(service:Marketplace){
   const pending=await service.db.all<{listing_id:string}>(
-    'SELECT listing_id FROM listing_publication_emails WHERE sent_at IS NULL ORDER BY rowid LIMIT 10');
+    `SELECT e.listing_id FROM listing_publication_emails e JOIN listings l ON l.id=e.listing_id
+      WHERE e.sent_at IS NULL AND l.state='published' AND l.expires_at>? ORDER BY e.rowid LIMIT 10`,Date.now());
   const result=await Promise.allSettled(pending.map(row=>sendPublicationEmail(service,row.listing_id)));
   return {sent:result.filter(item=>item.status==='fulfilled').length,pending:result.filter(item=>item.status==='rejected').length};
 }

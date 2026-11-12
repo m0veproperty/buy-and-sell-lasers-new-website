@@ -25,6 +25,14 @@ const schema=`
       approval_url TEXT,
       capture_id TEXT UNIQUE
     );
+    CREATE TABLE IF NOT EXISTS listing_payment_incidents(
+      event_id TEXT NOT NULL,
+      capture_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      PRIMARY KEY(event_id,capture_id)
+    );
+    CREATE INDEX IF NOT EXISTS listing_payment_incident_capture ON listing_payment_incidents(capture_id);
     CREATE TABLE IF NOT EXISTS listing_publication_emails(
       listing_id TEXT PRIMARY KEY REFERENCES listings(id),
       subject TEXT NOT NULL,

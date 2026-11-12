@@ -138,7 +138,7 @@ test('verified PayPal capture publishes once and queues an email to both recipie
     t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
   }
 
-  let verified=false,captured=false,captures=0,charge='120.00',emailAttempts=0;
+  let verified=false,captured=false,captures=0,charge='120.00',emailAttempts=0,voided=false,created=0;
   t.mock.method(globalThis,'fetch',async (url,init)=>{
     const path=new URL(url).pathname;
     const amount={currency_code:'GBP',value:charge};
@@ -156,8 +156,10 @@ test('verified PayPal capture publishes once and queues an email to both recipie
     }
     if(path==='/v2/checkout/orders'){
       assert.equal(JSON.parse(init.body).purchase_units[0].amount.value,'120.00');
-      return Response.json({id:'order',links:[{rel:'payer-action',href:'https://www.sandbox.paypal.com/checkoutnow?token=order'}]});
+      const id=++created===1?'oldorder':'order';
+      return Response.json({id,links:[{rel:'payer-action',href:'https://www.sandbox.paypal.com/checkoutnow?token='+id}]});
     }
+    if(path==='/v2/checkout/orders/oldorder')return Response.json({id:'oldorder',status:voided?'VOIDED':'CREATED'});
     if(path==='/v2/checkout/orders/order/capture'){
       captures++;
       captured=true;
@@ -170,9 +172,14 @@ test('verified PayPal capture publishes once and queues an email to both recipie
     }]});
   });
 
-  await assert.rejects(()=>s.publishedForOperators(seller.user),status(403));
-  assert.deepEqual((await s.publishedForOperators(operator.user)),[]);
-  await startCheckout(s,seller.user,listing.id);
+  await assert.rejects(()=>s.listingsForOperators(seller.user),status(403));
+  assert.deepEqual((await s.listingsForOperators(operator.user)),[]);
+  const first=await startCheckout(s,seller.user,listing.id);
+  assert.match(first.approvalUrl,/oldorder$/);
+  assert.deepEqual(await startCheckout(s,seller.user,listing.id),first);
+  voided=true;
+  assert.match((await startCheckout(s,seller.user,listing.id)).approvalUrl,/token=order$/);
+  assert.equal(created,2);
   await assert.rejects(()=>s.returnToDraft(seller.user,listing.id),status(409));
   const headers=new Headers(Object.fromEntries(
     ['auth-algo','cert-url','transmission-id','transmission-sig','transmission-time'].map(key=>['paypal-'+key,'test'])
@@ -195,7 +202,7 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   await captureCheckout(s,seller.user,listing.id,'order');
   assert.equal(captures,1);
   assert.equal((await s.mine(seller.user))[0].state,'published');
-  assert.deepEqual((await s.publishedForOperators(operator.user))[0].flags,['The seller did not provide service or ownership history.']);
+  assert.deepEqual((await s.listingsForOperators(operator.user))[0].flags,['The seller did not provide service or ownership history.']);
   assert.deepEqual((await s.photo(photo)),new Uint8Array([1]));
   assert.equal((await s.publishedListing(listing.id)).state,'published');
   assert.equal((await db.get('SELECT count(*) AS count FROM listing_publication_emails')).count,1);
@@ -206,4 +213,19 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   await sendPublicationEmail(s,listing.id);
   assert.equal(emailAttempts,2);
   assert.equal((await db.get('SELECT provider_id FROM listing_publication_emails')).provider_id,'email');
+  const refund={id:'refund-event',event_type:'PAYMENT.CAPTURE.REFUNDED',
+    resource:{links:[{rel:'up',href:'https://api-m.sandbox.paypal.com/v2/payments/captures/capture'}]}};
+  verified=false;
+  await assert.rejects(paypalWebhook(s,headers,refund),status(400));
+  assert.ok(await s.publishedListing(listing.id));
+  verified=true;
+  await paypalWebhook(s,headers,refund);
+  await paypalWebhook(s,headers,refund);
+  assert.equal((await db.get('SELECT count(*) AS n FROM listing_payment_incidents')).n,1);
+  assert.equal(await s.publishedListing(listing.id),undefined);
+  assert.equal((await s.mine(seller.user))[0].state,'withdrawn');
+  const [held]=await s.listingsForOperators(operator.user);
+  assert.deepEqual(held.paymentIncidents,['PAYMENT.CAPTURE.REFUNDED']);
+  await assert.rejects(s.photo(photo),status(404));
+  assert.deepEqual(await s.photo(photo,operator.user),new Uint8Array([1]));
 });

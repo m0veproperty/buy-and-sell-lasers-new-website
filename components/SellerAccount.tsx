@@ -51,6 +51,8 @@ export default function SellerAccount(){
       const url=new URL(window.location.href);
       if(url.searchParams.get('paypalListing')===l.id&&url.searchParams.has('token')){await finishCheckout();return;}
       const result=await api(`listings/${l.id}/checkout`,'POST',{});
+      if(result.published){await refresh();setNotice('PayPal payment confirmed. Your listing is live.');return;}
+      if(!result.approvalUrl){await refresh();setNotice('PayPal payment status was refreshed.');return;}
       window.location.assign(result.approvalUrl);
     })}>Pay with PayPal</button>}{l.state==='awaiting_payment'&&!l.checkoutStarted&&<button className="text-link" disabled={busy} onClick={()=>act(async()=>{const {listing}=await api(`listings/${l.id}/draft`,'POST');setEditing(listing);setFields(listing.data);setShowEditor(true);await refresh();})}>Return to draft</button>}</div></article>):<div className="account-empty"><h3>A fresh start.</h3><p>Add your first machine to save a listing and its photographs.</p></div>}</div>
     <section className="account-inbox"><p className="eyebrow"><Mail size={16}/> BUYER CONVERSATIONS</p><h2>Your enquiries</h2>{account.enquiries.length?account.enquiries.map(e=><article key={e.id}><h3>{e.data.make} {e.data.model}</h3><p><strong>{e.name}</strong> · <a href={`mailto:${e.email}`}>{e.email}</a></p><p className="message-preview">{e.message}</p></article>):<p>Enquiries for your published machines will appear here. Email notifications will be connected later.</p>}</section>

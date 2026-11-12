@@ -61,13 +61,17 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
     if(method==='POST'&&key==='contact'){await service.rate('contact-global',50);const data=await json(req);await service.rate('contact:'+String(data.email).toLowerCase(),5);return response(await service.contact(data),201);}
     const user=await service.user(token);
     if(method==='GET'&&key==='account')return response({user,listings:await service.mine(user),enquiries:await service.inbox(user)});
-    if(method==='GET'&&key==='operator/listings')return response({listings:await service.publishedForOperators(user)});
+    if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(user)});
     if(method!=='GET')await service.rate('write:'+user.id,100);
     if(method==='POST'&&key==='listings')return response({listing:await service.save(user,await json(req))},201);
     if(path[0]==='listings'&&path.length>=2){
       const id=path[1];
       if(method==='POST'&&path[2]==='checkout'&&path.length===3){
-        return response(await startCheckout(service,user,id));
+        const checkout=await startCheckout(service,user,id);
+        if(checkout.published)await sendPublicationEmail(service,id).catch(()=>{
+          console.error('Publication email remains queued.');
+        });
+        return response(checkout);
       }
       if(method==='POST'&&path[2]==='capture'&&path.length===3){
         const listingId=await captureCheckout(service,user,id,(await json(req)).orderId);

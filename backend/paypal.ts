@@ -71,9 +71,22 @@ export async function startCheckout(service:Marketplace,user:User,id:string){
   await service.db.run(`INSERT INTO listing_payments(listing_id,request_id,amount_pence)
     SELECT id,?,fee_pence FROM listings WHERE id=? AND state='awaiting_payment' AND fee_pence=?
     ON CONFLICT(listing_id) DO NOTHING`,randomUUID(),id,row.fee_pence);
-  const checkout=await payment(service.db,id);
+  let checkout=await payment(service.db,id);
   if(!checkout||checkout.capture_id)throw new ApiError(409,'Checkout is no longer available.');
-  if(checkout.approval_url)return {approvalUrl:checkout.approval_url};
+  if(checkout.paypal_order_id){
+    const existing=await api.call<Order>(orderPath(checkout.paypal_order_id));
+    if(existing.id!==checkout.paypal_order_id)throw new ApiError(409,'This payment needs reconciliation.');
+    if(existing.status==='COMPLETED'||existing.status==='APPROVED'){
+      await captureOrder(service,checkout,api);
+      return {published:Boolean(await service.publishedListing(id))};
+    }
+    if(existing.status!=='VOIDED')return {approvalUrl:checkout.approval_url};
+    await service.db.run(`UPDATE listing_payments SET request_id=?,paypal_order_id=NULL,approval_url=NULL
+      WHERE listing_id=? AND paypal_order_id=? AND capture_id IS NULL`,randomUUID(),id,existing.id);
+    checkout=await payment(service.db,id);
+    if(!checkout||checkout.capture_id)throw new ApiError(409,'This payment needs reconciliation.');
+    if(checkout.approval_url)return {approvalUrl:checkout.approval_url};
+  }
 
   const order=await api.call<Order>('/v2/checkout/orders',{
     intent:'CAPTURE',
@@ -87,8 +100,10 @@ export async function startCheckout(service:Marketplace,user:User,id:string){
   const approval=link?new URL(link.href):null;
   if(!order.id||!approval||approval.origin!=='https://'+host)throw new ApiError(502,'PayPal did not return a checkout link.');
   await service.db.run(`UPDATE listing_payments SET paypal_order_id=?,approval_url=?
-    WHERE listing_id=? AND paypal_order_id IS NULL`,order.id,approval.href,id);
-  return {approvalUrl:(await payment(service.db,id))!.approval_url!};
+    WHERE listing_id=? AND request_id=? AND paypal_order_id IS NULL`,order.id,approval.href,id,checkout.request_id);
+  const saved=await payment(service.db,id);
+  if(!saved?.approval_url)throw new ApiError(409,'Checkout changed. Please try again.');
+  return {approvalUrl:saved.approval_url};
 }
 
 async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant:string,origin:string){
@@ -106,12 +121,14 @@ async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,me
     if(current?.capture_id!==capture.id){
       const listing=await db.get<{data:string;package_id:string}>('SELECT data,package_id FROM listings WHERE id=?',checkout.listing_id);
       const pack=listingPackages.find(item=>item.id===listing?.package_id);
-      if(!listing||!pack||current?.capture_id)throw new ApiError(409,'This payment needs reconciliation.');
+      if(!listing||!pack||current?.capture_id||current?.paypal_order_id!==checkout.paypal_order_id)throw new ApiError(409,'This payment needs reconciliation.');
       const now=Date.now();
-      const updated=await db.run(`UPDATE listings SET state='published',expires_at=?,updated_at=?
-        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`,now+pack.durationDays*86400000,now,checkout.listing_id,checkout.amount_pence);
+      const held=await db.get('SELECT 1 FROM listing_payment_incidents WHERE capture_id=?',capture.id);
+      const updated=await db.run(`UPDATE listings SET state=?,expires_at=?,updated_at=?
+        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`,held?'withdrawn':'published',held?null:now+pack.durationDays*86400000,now,checkout.listing_id,checkout.amount_pence);
       if(updated!==1)throw new ApiError(409,'This payment needs reconciliation.');
       await db.run('UPDATE listing_payments SET capture_id=? WHERE listing_id=?',capture.id,checkout.listing_id);
+      if(held)return;
       const machine=JSON.parse(listing.data) as Machine;
       const name=(machine.make+' '+machine.model).replace(/\s+/g,' ');
       const url=new URL('/equipment/'+encodeURIComponent(checkout.listing_id),origin).href;
@@ -146,14 +163,52 @@ export async function captureCheckout(service:Marketplace,user:User,id:string,or
   return checkout.listing_id;
 }
 
+const adverseEvents=new Set(['PAYMENT.CAPTURE.REFUNDED','PAYMENT.CAPTURE.REVERSED','CUSTOMER.DISPUTE.CREATED']);
+
+type WebhookResource={
+  id?:string;
+  links?:{rel?:string;href?:string}[];
+  supplementary_data?:{related_ids?:{order_id?:string;capture_id?:string}};
+  disputed_transactions?:{seller_transaction_id?:string}[];
+};
+
+function incidentCaptures(event:string,resource:WebhookResource|undefined){
+  const ids=event==='CUSTOMER.DISPUTE.CREATED'
+    ? resource?.disputed_transactions?.map(transaction=>transaction.seller_transaction_id)??[]
+    : [resource?.supplementary_data?.related_ids?.capture_id,
+      ...(event==='PAYMENT.CAPTURE.REVERSED'?[resource?.id]:[]),
+      ...(resource?.links??[]).filter(link=>link.rel==='up').map(link=>{
+        if(typeof link.href!=='string')return;
+        return /\/v2\/payments\/captures\/([A-Z0-9]+)$/i.exec(link.href)?.[1];
+      })];
+  return [...new Set(ids.filter((id):id is string=>typeof id==='string'&&/^[A-Z0-9]{1,50}$/i.test(id)))];
+}
+
+async function holdAffectedListings(service:Marketplace,eventId:string,eventType:string,captureIds:string[]){
+  await service.db.write(async db=>{
+    const now=Date.now();
+    for(const captureId of captureIds){
+      await db.run(`INSERT INTO listing_payment_incidents VALUES(?,?,?,?) ON CONFLICT(event_id,capture_id) DO NOTHING`,
+        eventId,captureId,eventType,now);
+      await db.run(`UPDATE listings SET state='withdrawn',updated_at=? WHERE state='published'
+        AND id=(SELECT listing_id FROM listing_payments WHERE capture_id=?)`,now,captureId);
+    }
+  });
+}
+
 export async function paypalWebhook(service:Marketplace,headers:Headers,event:Record<string,unknown>){
-  const approved=event.event_type==='CHECKOUT.ORDER.APPROVED';
-  if(!approved&&event.event_type!=='PAYMENT.CAPTURE.COMPLETED')return;
-  const resource=event.resource as {id?:string;supplementary_data?:{related_ids?:{order_id?:string}}}|undefined;
+  const eventType=event.event_type;
+  if(typeof eventType!=='string')return;
+  const approved=eventType==='CHECKOUT.ORDER.APPROVED';
+  const adverse=adverseEvents.has(eventType);
+  if(!approved&&!adverse&&eventType!=='PAYMENT.CAPTURE.COMPLETED')return;
+  const resource=event.resource as WebhookResource|undefined;
   const orderId=approved?resource?.id:resource?.supplementary_data?.related_ids?.order_id;
-  if(typeof orderId!=='string')return;
-  const checkout=await service.db.get<Checkout>('SELECT * FROM listing_payments WHERE paypal_order_id=?',orderId);
-  if(!checkout)return;
+  const checkout=typeof orderId==='string'
+    ? await service.db.get<Checkout>('SELECT * FROM listing_payments WHERE paypal_order_id=?',orderId)
+    : undefined;
+  const captures=adverse?incidentCaptures(eventType,resource):[];
+  if(adverse?(!captures.length||typeof event.id!=='string'):!checkout)return;
   const signature:Record<string,string>={};
   for(const key of ['auth_algo','cert_url','transmission_id','transmission_sig','transmission_time']){
     const value=headers.get('paypal-'+key.replaceAll('_','-'));
@@ -165,6 +220,11 @@ export async function paypalWebhook(service:Marketplace,headers:Headers,event:Re
     ...signature,webhook_id:api.webhook,webhook_event:event
   });
   if(verification.verification_status!=='SUCCESS')throw new ApiError(400,'Invalid PayPal signature.');
+  if(adverse){
+    await holdAffectedListings(service,event.id as string,eventType,captures);
+    return;
+  }
+  if(!checkout||typeof orderId!=='string')return;
   if(approved){
     await captureOrder(service,checkout,api);
   }else if(!checkout.capture_id){

@@ -78,11 +78,13 @@ export class Marketplace {
     if(token)await this.db.run('DELETE FROM sessions WHERE token_hash=?',hash(token));
   }
 
-  async publishedForOperators(user:User){
+  async listingsForOperators(user:User){
     if(!await this.db.get('SELECT 1 FROM listing_operators WHERE user_id=?',user.id)){
       throw new ApiError(403,'Operator access is required.');
     }
-    const rows=await this.db.all<Row&{seller_email:string;similar:number}>(`SELECT l.*,u.email AS seller_email,
+    const rows=await this.db.all<Row&{seller_email:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,
+      (SELECT json_group_array(DISTINCT event_type) FROM listing_payment_incidents i
+        WHERE i.capture_id=p.capture_id) AS payment_incidents,
       EXISTS(SELECT 1 FROM listings other
         WHERE other.id<>l.id AND other.state='published' AND other.expires_at>?
         AND lower(json_extract(other.data,'$.make'))=lower(json_extract(l.data,'$.make'))
@@ -90,14 +92,15 @@ export class Marketplace {
         AND lower(json_extract(other.data,'$.location'))=lower(json_extract(l.data,'$.location'))) AS similar
       FROM listings l JOIN users u ON u.id=l.owner_id
       JOIN listing_payments p ON p.listing_id=l.id
-      WHERE l.state='published' AND l.expires_at>? AND p.capture_id IS NOT NULL
+      WHERE p.capture_id IS NOT NULL AND ((l.state='published' AND l.expires_at>?)
+        OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_payment_incidents i WHERE i.capture_id=p.capture_id)))
       ORDER BY l.updated_at DESC LIMIT 100`,Date.now(),Date.now());
     return Promise.all(rows.map(async row=>{
       const listing=await this.present(row);
       const flags:string[]=[];
       if(row.similar)flags.push('Another listing has the same make, model and location.');
       if(!listing.data.history)flags.push('The seller did not provide service or ownership history.');
-      return {...listing,sellerEmail:row.seller_email,flags};
+      return {...listing,sellerEmail:row.seller_email,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
     }));
   }
 
@@ -195,9 +198,12 @@ export class Marketplace {
   }
 
   async photo(photoId:string,user?:User){
-    const p=await this.db.get<{bytes:ArrayBuffer;owner_id:string;state:string;expires_at:number}>(`SELECT p.bytes,l.owner_id,l.state,l.expires_at
-      FROM photos p JOIN listings l ON l.id=p.listing_id WHERE p.id=?`,photoId);
-    if(!p||(p.owner_id!==user?.id&&!(p.state==='published'&&p.expires_at>Date.now())))throw new ApiError(404,'Photograph not found.');
+    const p=await this.db.get<{bytes:ArrayBuffer}>(`SELECT p.bytes FROM photos p JOIN listings l ON l.id=p.listing_id
+      WHERE p.id=? AND (l.owner_id=? OR (l.state='published' AND l.expires_at>?)
+      OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?)
+        AND EXISTS(SELECT 1 FROM listing_payments lp JOIN listing_payment_incidents i
+          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),user?.id??null);
+    if(!p)throw new ApiError(404,'Photograph not found.');
     return new Uint8Array(p.bytes);
   }
 

@@ -50,7 +50,7 @@ Saved drafts require at least one photo before submission. The server derives th
 1. Run the app and create the operator’s account in `/account`. Confirm control of that account before granting access. In the local database, look up its ID with `SELECT id, email FROM users;`, then provision that exact ID with a parameterized `INSERT INTO listing_operators(user_id) VALUES (?);`. Remove the grant with `DELETE FROM listing_operators WHERE user_id=?;`. Sign in and open `/operator`.
 2. Set `APP_ORIGIN` to the HTTPS origin used for both the seller’s browser and the PayPal webhook. Point a test HTTPS reverse proxy at the local app. Set `PAYPAL_MODE=sandbox` and provide `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MERCHANT_ID` and `PAYPAL_WEBHOOK_ID` via server-side environment configuration.
 3. Configure `RESEND_API_KEY` and `MARKETPLACE_EMAIL_FROM` with a verified sender. PayPal webhook retries can reattempt a queued email after a delivery error. To retry manually, send a bearer token matching `MARKETPLACE_NOTIFICATION_SECRET` to `POST /api/marketplace/notifications/retry`. For sandbox tests, mock email delivery or leave the sender unconfigured to avoid notifying the production recipients.
-4. Register `/api/marketplace/paypal/webhook` on the same PayPal app for `CHECKOUT.ORDER.APPROVED` and `PAYMENT.CAPTURE.COMPLETED`. Use the sandbox buyer account to exercise the redirect and webhook, including a buyer who closes the tab after approving payment.
+4. Register `/api/marketplace/paypal/webhook` on the same PayPal app for `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.CAPTURE.REVERSED` and `CUSTOMER.DISPUTE.CREATED`. Use the sandbox buyer account to exercise the redirect and webhook, including a buyer who closes the tab after approving payment.
 5. Confirm the captured GBP amount, public listing and seller enquiry inbox. Confirm that only one publication email was queued.
 
 ## Vercel preview setup
@@ -63,7 +63,7 @@ Saved drafts require at least one photo before submission. The server derives th
 
 1. Decide whether to migrate any local accounts, listings and images. Import into an empty database using a libSQL-compatible SQLite dump, or start with an empty production database.
 2. If existing WordPress inventory will be migrated, establish its seller ownership before import. The existing source catalogue entries retain their existing contact paths.
-3. Confirm seller verification, account recovery, refund, reversal, dispute and checkout-expiry handling, and the listing terms before accepting live payments. The current checkout retains its original PayPal order for retries, so expired orders require intervention.
+3. Confirm seller verification, account recovery and listing terms. Checkout replaces orders PayPal reports as voided and reconciles already-approved orders. Refunds, reversals and disputes withdraw affected listings and appear in the operator portal. Operators reconcile any reinstatement after reviewing the PayPal case.
 4. After sandbox verification, configure the intended live PayPal merchant and webhook in the hosting project’s server-side environment.
 
 ## Verification
