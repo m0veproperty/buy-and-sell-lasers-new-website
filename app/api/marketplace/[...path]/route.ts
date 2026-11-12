@@ -25,7 +25,7 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
     const path=(await ctx.params).path,method=req.method;
     const key=path.join('/');
     if(method==='POST'&&key==='paypal/webhook'){
-      const service=new Marketplace(getStore());
+      const service=new Marketplace(await getStore());
       const listingId=await paypalWebhook(service,req.headers,await json(req));
       if(listingId)await sendPublicationEmail(service,listingId);
       return response({ok:true});
@@ -37,7 +37,7 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
       if(!secret||actual.length!==expected.length||!timingSafeEqual(actual,expected)){
         throw new ApiError(401,'Notification retry is not authorized.');
       }
-      return response(await retryPublicationEmails(new Marketplace(getStore())));
+      return response(await retryPublicationEmails(new Marketplace(await getStore())));
     }
     if(method!=='GET'){
       const requestOrigin=new URL(req.url);
@@ -46,24 +46,24 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
       const expected=process.env.APP_ORIGIN||requestOrigin.origin;
       if(req.headers.get('origin')!==expected)throw new ApiError(403,'Request origin is not allowed.');
     }
-    const service=new Marketplace(getStore()),token=req.cookies.get(cookieName)?.value;
+    const service=new Marketplace(await getStore()),token=req.cookies.get(cookieName)?.value;
     if(method==='POST'&&(key==='auth/register'||key==='auth/login')){
-      service.rate('auth-global',100);
-      const data=await json(req);service.rate('auth:'+String(data.email).trim().toLowerCase(),10);
+      await service.rate('auth-global',100);
+      const data=await json(req);await service.rate('auth:'+String(data.email).trim().toLowerCase(),10);
       const result=key.endsWith('register')?await service.register(data):await service.login(data);
       const res=response({user:result.user},key.endsWith('register')?201:200);
-      res.cookies.set(cookieName,result.token,{httpOnly:true,sameSite:'strict',secure:new URL(req.url).protocol==='https:',path:'/',maxAge:604800});return res;
+      res.cookies.set(cookieName,result.token,{httpOnly:true,sameSite:'strict',secure:Boolean(process.env.VERCEL)||new URL(req.url).protocol==='https:',path:'/',maxAge:604800});return res;
     }
-    if(method==='POST'&&key==='auth/logout'){service.logout(token);const res=response({ok:true});res.cookies.set(cookieName,'',{maxAge:0,path:'/'});return res;}
-    if(method==='GET'&&key==='listings')return response({listings:service.published()});
-    if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}const data=service.photo(path[1],user);return new NextResponse(new Uint8Array(data),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
-    if(method==='POST'&&path[0]==='enquiries'&&path.length===2){service.rate('enquiry-global',100);const data=await json(req);service.rate('enquiry:'+String(data.email).toLowerCase(),5);return response(service.enquire(path[1],data),201);}
-    if(method==='POST'&&key==='contact'){service.rate('contact-global',50);const data=await json(req);service.rate('contact:'+String(data.email).toLowerCase(),5);return response(service.contact(data),201);}
-    const user=service.user(token);
-    if(method==='GET'&&key==='account')return response({user,listings:service.mine(user),enquiries:service.inbox(user)});
-    if(method==='GET'&&key==='operator/listings')return response({listings:service.publishedForOperators(user)});
-    if(method!=='GET')service.rate('write:'+user.id,100);
-    if(method==='POST'&&key==='listings')return response({listing:service.save(user,await json(req))},201);
+    if(method==='POST'&&key==='auth/logout'){await service.logout(token);const res=response({ok:true});res.cookies.set(cookieName,'',{maxAge:0,path:'/'});return res;}
+    if(method==='GET'&&key==='listings')return response({listings:await service.published()});
+    if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=await service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}const data=await service.photo(path[1],user);return new NextResponse(new Uint8Array(data),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
+    if(method==='POST'&&path[0]==='enquiries'&&path.length===2){await service.rate('enquiry-global',100);const data=await json(req);await service.rate('enquiry:'+String(data.email).toLowerCase(),5);return response(await service.enquire(path[1],data),201);}
+    if(method==='POST'&&key==='contact'){await service.rate('contact-global',50);const data=await json(req);await service.rate('contact:'+String(data.email).toLowerCase(),5);return response(await service.contact(data),201);}
+    const user=await service.user(token);
+    if(method==='GET'&&key==='account')return response({user,listings:await service.mine(user),enquiries:await service.inbox(user)});
+    if(method==='GET'&&key==='operator/listings')return response({listings:await service.publishedForOperators(user)});
+    if(method!=='GET')await service.rate('write:'+user.id,100);
+    if(method==='POST'&&key==='listings')return response({listing:await service.save(user,await json(req))},201);
     if(path[0]==='listings'&&path.length>=2){
       const id=path[1];
       if(method==='POST'&&path[2]==='checkout'&&path.length===3){
@@ -76,15 +76,15 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
         });
         return response({ok:true});
       }
-      if(method==='PATCH'&&path.length===2)return response({listing:service.save(user,await json(req),id)});
-      if(method==='POST'&&path[2]==='submit'&&path.length===3)return response({listing:service.submit(user,id)});
-      if(method==='POST'&&path[2]==='draft'&&path.length===3)return response({listing:service.returnToDraft(user,id)});
+      if(method==='PATCH'&&path.length===2)return response({listing:await service.save(user,await json(req),id)});
+      if(method==='POST'&&path[2]==='submit'&&path.length===3)return response({listing:await service.submit(user,id)});
+      if(method==='POST'&&path[2]==='draft'&&path.length===3)return response({listing:await service.returnToDraft(user,id)});
       if(method==='POST'&&path[2]==='photos'&&path.length===3){
-        service.owned(user,id);const raw=await bytes(req,8*1024*1024);let converted:Buffer;
-        try{const image=sharp(raw,{limitInputPixels:24000000,animated:false});const metadata=await image.metadata();if(!['jpeg','png','webp'].includes(metadata.format??''))throw new Error();converted=await image.rotate().resize({width:1800,height:1800,fit:'inside',withoutEnlargement:true}).webp({quality:85}).toBuffer();}catch{throw new ApiError(400,'Upload a JPEG, PNG or WebP photograph, up to 8 MB and 24 megapixels.');}
-        return response({id:service.addPhoto(user,id,converted)},201);
+        await service.owned(user,id);const raw=await bytes(req,4*1024*1024);let converted:Buffer;
+        try{const image=sharp(raw,{limitInputPixels:24000000,animated:false});const metadata=await image.metadata();if(!['jpeg','png','webp'].includes(metadata.format??''))throw new Error();converted=await image.rotate().resize({width:1800,height:1800,fit:'inside',withoutEnlargement:true}).webp({quality:85}).toBuffer();}catch{throw new ApiError(400,'Upload a JPEG, PNG or WebP photograph, up to 4 MB and 24 megapixels.');}
+        return response({id:await service.addPhoto(user,id,converted)},201);
       }
-      if(method==='DELETE'&&path[2]==='photos'&&path.length===4){service.removePhoto(user,id,path[3]);return response({ok:true});}
+      if(method==='DELETE'&&path[2]==='photos'&&path.length===4){await service.removePhoto(user,id,path[3]);return response({ok:true});}
     }
     throw new ApiError(404,'Endpoint not found.');
   }catch(error){if(error instanceof ApiError)return response({error:error.message},error.status);if(error instanceof Error&&error.message==='HOSTED_STORAGE_REQUIRED')return response({error:'Account services are not connected on this deployment yet.'},503);console.error('Marketplace request failed:',error instanceof Error?error.name:'Unknown error');return response({error:'Unable to complete this request. Please try again.'},500);}

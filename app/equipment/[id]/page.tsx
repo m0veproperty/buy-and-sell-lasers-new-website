@@ -8,8 +8,11 @@ export const dynamic='force-dynamic';
 
 export default async function EquipmentPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
-  if(process.env.VERCEL)notFound();
-  const listing=new Marketplace(getStore()).publishedListing(id);
+  const store=await getStore().catch(error=>{
+    if(error instanceof Error&&error.message==='HOSTED_STORAGE_REQUIRED')notFound();
+    throw error;
+  });
+  const listing=await new Marketplace(store).publishedListing(id);
   if(!listing)notFound();
   const {data,photos}=listing;
   return <SiteShell>

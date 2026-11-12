@@ -1,14 +1,14 @@
-# Local marketplace backend
+# Marketplace backend
 
-The Next.js marketplace backend currently runs with local SQLite. Its seller accounts, listings and PayPal orders are independent of the WordPress marketplace.
+The Next.js marketplace backend uses a local SQLite file for development and supports hosted libSQL for Vercel. Its seller accounts, listings and PayPal orders are independent of the WordPress marketplace.
 
 ## Run
 
 Use Node 24. `npm run dev` serves the application; `npm run build -- --webpack` builds the server application, and `npm start` serves it. The seller workspace is `/account`. Native SQLite stores records and re-encoded photo bytes in `work/backend/marketplace.sqlite`; preserve this database and its WAL when backing up a running instance. Stop the process before copying only the main database file.
 
-The app now requires a Next.js server; static export was removed. Before a later Vercel deployment, clear any legacy `out` output-directory override and use the Next.js framework preset.
+The app now requires a Next.js server; static export was removed. On Vercel, use the Next.js framework preset and clear any legacy `out` output-directory override.
 
-Account and draft features run without credentials. PayPal checkout requires sandbox configuration. `MARKETPLACE_DB_PATH` optionally overrides the database location. `APP_ORIGIN` can set the canonical mutation origin when running behind a trusted proxy. Without it, mutations must match the request's protocol and Host. Do not use this local adapter on Vercel: `getStore()` deliberately refuses that runtime, since ephemeral disk is not durable account storage.
+Account and draft features run without credentials. PayPal checkout requires sandbox configuration. `MARKETPLACE_DB_PATH` optionally overrides the database location. `APP_ORIGIN` can set the canonical mutation origin when running behind a trusted proxy. Without it, mutations must match the request's protocol and Host. Vercel requires a hosted database and refuses to fall back to local disk. The Turso integration supplies `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The pair `MARKETPLACE_DATABASE_URL` and `MARKETPLACE_DATABASE_TOKEN` can explicitly select a different database.
 
 ## Boundaries
 
@@ -18,7 +18,7 @@ Account and draft features run without credentials. PayPal checkout requires san
 - `lib/listing-packages.ts`: shared package definitions and server-side fee calculation in integer pence.
 - `/account`: registration, login/logout, listing editor, photo management and seller enquiry inbox.
 
-Sessions use random opaque tokens; only token hashes are stored. Passwords use salted scrypt hashes. Email addresses are not verified at this stage. Persistent request counters provide basic local rate limiting, not a substitute for edge abuse protection at launch. Photos accept JPEG, PNG and WebP, enforce byte/pixel limits, strip metadata and are served only to the owner while unpublished.
+Sessions use random opaque tokens; only token hashes are stored. Passwords use salted scrypt hashes. Email addresses are not verified at this stage. Persistent request counters provide basic local rate limiting, not a substitute for edge abuse protection at launch. Photos accept JPEG, PNG and WebP up to 4 MB and 24 megapixels, strip metadata and are served only to the owner while unpublished.
 
 ## Implemented routes
 
@@ -53,13 +53,19 @@ Saved drafts require at least one photo before submission. The server derives th
 4. Register `/api/marketplace/paypal/webhook` on the same PayPal app for `CHECKOUT.ORDER.APPROVED` and `PAYMENT.CAPTURE.COMPLETED`. Use the sandbox buyer account to exercise the redirect and webhook, including a buyer who closes the tab after approving payment.
 5. Confirm the captured GBP amount, public listing and seller enquiry inbox. Confirm that only one publication email was queued.
 
+## Vercel preview setup
+
+1. Create a hosted libSQL database, such as Turso, for preview testing. Use the Vercel Turso integration or set `MARKETPLACE_DATABASE_URL` to the TLS database URL and `MARKETPLACE_DATABASE_TOKEN` to a database-scoped token with write access. The backend initializes missing schema objects when it first connects.
+2. Set `APP_ORIGIN` to the stable preview origin. Register the PayPal sandbox webhook against that origin and configure the matching sandbox credentials for the preview environment. PayPal needs an HTTPS endpoint it can reach.
+3. Use an isolated database for production and set its own payment and email configuration. Preview and production must use different credentials and databases.
+
 ## Before production
 
-1. Replace local SQLite with a durable hosted database and migrate any accounts, listings and images that should carry over. The Vercel deployment currently blocks the local persistence adapter.
+1. Decide whether to migrate any local accounts, listings and images. Import into an empty database using a libSQL-compatible SQLite dump, or start with an empty production database.
 2. If existing WordPress inventory will be migrated, establish its seller ownership before import. The existing source catalogue entries retain their existing contact paths.
 3. Confirm seller verification, account recovery, refund, reversal, dispute and checkout-expiry handling, and the listing terms before accepting live payments. The current checkout retains its original PayPal order for retries, so expired orders require intervention.
 4. After sandbox verification, configure the intended live PayPal merchant and webhook in the hosting project’s server-side environment.
 
 ## Verification
 
-`npm run test:backend` checks fee boundaries, invalid inputs, authentication/session expiry, ownership, photos, payment holding state, enquiries and rate limits. Run on an isolated database. Payment tests mock PayPal responses. Run a sandbox checkout before enabling live payments.
+`npm run test:backend` checks fee boundaries, invalid inputs, authentication/session expiry, ownership, photos, payment holding state, enquiries and rate limits. Run on an isolated database. Tests cover the local libSQL driver, an existing SQLite file, and mocked PayPal and email responses. Run a sandbox checkout before enabling live payments.

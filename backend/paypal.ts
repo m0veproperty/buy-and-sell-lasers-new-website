@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import type {Queries} from './store.ts';
 import {listingPackages} from '../lib/listing-packages.ts';
 import {ApiError,Marketplace,type Machine,type User} from './service.ts';
 
@@ -59,18 +60,18 @@ async function client(){
 const amount=(pence:number)=>(pence/100).toFixed(2);
 const orderPath=(id:string)=>'/v2/checkout/orders/'+encodeURIComponent(id);
 
-function payment(service:Marketplace,id:string){
-  return service.db.prepare('SELECT * FROM listing_payments WHERE listing_id=?').get(id) as Checkout|undefined;
+function payment(db:Queries,id:string){
+  return db.get<Checkout>('SELECT * FROM listing_payments WHERE listing_id=?',id);
 }
 
 export async function startCheckout(service:Marketplace,user:User,id:string){
-  const row=service.owned(user,id);
+  const row=await service.owned(user,id);
   if(row.state!=='awaiting_payment'||!row.fee_pence)throw new ApiError(409,'Submit the listing before starting checkout.');
   const api=await client();
-  service.db.prepare(`INSERT INTO listing_payments(listing_id,request_id,amount_pence)
+  await service.db.run(`INSERT INTO listing_payments(listing_id,request_id,amount_pence)
     SELECT id,?,fee_pence FROM listings WHERE id=? AND state='awaiting_payment' AND fee_pence=?
-    ON CONFLICT(listing_id) DO NOTHING`).run(randomUUID(),id,row.fee_pence);
-  const checkout=payment(service,id);
+    ON CONFLICT(listing_id) DO NOTHING`,randomUUID(),id,row.fee_pence);
+  const checkout=await payment(service.db,id);
   if(!checkout||checkout.capture_id)throw new ApiError(409,'Checkout is no longer available.');
   if(checkout.approval_url)return {approvalUrl:checkout.approval_url};
 
@@ -85,12 +86,12 @@ export async function startCheckout(service:Marketplace,user:User,id:string){
   const host=api.mode==='live'?'www.paypal.com':'www.sandbox.paypal.com';
   const approval=link?new URL(link.href):null;
   if(!order.id||!approval||approval.origin!=='https://'+host)throw new ApiError(502,'PayPal did not return a checkout link.');
-  service.db.prepare(`UPDATE listing_payments SET paypal_order_id=?,approval_url=?
-    WHERE listing_id=? AND paypal_order_id IS NULL`).run(order.id,approval.href,id);
-  return {approvalUrl:payment(service,id)!.approval_url!};
+  await service.db.run(`UPDATE listing_payments SET paypal_order_id=?,approval_url=?
+    WHERE listing_id=? AND paypal_order_id IS NULL`,order.id,approval.href,id);
+  return {approvalUrl:(await payment(service.db,id))!.approval_url!};
 }
 
-function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant:string,origin:string){
+async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant:string,origin:string){
   const unit=order.purchase_units?.[0];
   const capture=unit?.payments?.captures?.[0];
   if(order.id!==checkout.paypal_order_id||order.status!=='COMPLETED'||
@@ -100,32 +101,23 @@ function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant
     capture.amount.value!==amount(checkout.amount_pence)){
     throw new ApiError(409,'PayPal has not confirmed the expected payment.');
   }
-  service.db.exec('BEGIN IMMEDIATE');
-  try{
-    const current=payment(service,checkout.listing_id);
+  await service.db.write(async db=>{
+    const current=await payment(db,checkout.listing_id);
     if(current?.capture_id!==capture.id){
-      const listing=service.db.prepare('SELECT data,package_id FROM listings WHERE id=?')
-        .get(checkout.listing_id) as {data:string;package_id:string}|undefined;
+      const listing=await db.get<{data:string;package_id:string}>('SELECT data,package_id FROM listings WHERE id=?',checkout.listing_id);
       const pack=listingPackages.find(item=>item.id===listing?.package_id);
       if(!listing||!pack||current?.capture_id)throw new ApiError(409,'This payment needs reconciliation.');
       const now=Date.now();
-      const update=service.db.prepare(`UPDATE listings SET state='published',expires_at=?,updated_at=?
-        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`)
-        .run(now+pack.durationDays*86400000,now,checkout.listing_id,checkout.amount_pence);
-      if(update.changes!==1)throw new ApiError(409,'This payment needs reconciliation.');
-      service.db.prepare('UPDATE listing_payments SET capture_id=? WHERE listing_id=?')
-        .run(capture.id,checkout.listing_id);
+      const updated=await db.run(`UPDATE listings SET state='published',expires_at=?,updated_at=?
+        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`,now+pack.durationDays*86400000,now,checkout.listing_id,checkout.amount_pence);
+      if(updated!==1)throw new ApiError(409,'This payment needs reconciliation.');
+      await db.run('UPDATE listing_payments SET capture_id=? WHERE listing_id=?',capture.id,checkout.listing_id);
       const machine=JSON.parse(listing.data) as Machine;
       const name=(machine.make+' '+machine.model).replace(/\s+/g,' ');
       const url=new URL('/equipment/'+encodeURIComponent(checkout.listing_id),origin).href;
-      service.db.prepare('INSERT INTO listing_publication_emails(listing_id,subject,body) VALUES(?,?,?)')
-        .run(checkout.listing_id,'New listing live: '+name,`A new listing is live on Buy & Sell Lasers.\n\n${name} (${machine.year})\n${url}`);
+      await db.run('INSERT INTO listing_publication_emails(listing_id,subject,body) VALUES(?,?,?)',checkout.listing_id,'New listing live: '+name,`A new listing is live on Buy & Sell Lasers.\n\n${name} (${machine.year})\n${url}`);
     }
-    service.db.exec('COMMIT');
-  }catch(error){
-    service.db.exec('ROLLBACK');
-    throw error;
-  }
+  });
 }
 
 async function captureOrder(service:Marketplace,checkout:Checkout,api:Awaited<ReturnType<typeof client>>){
@@ -143,12 +135,12 @@ async function captureOrder(service:Marketplace,checkout:Checkout,api:Awaited<Re
     await api.call(path+'/capture',{},'capture-'+checkout.request_id);
     order=await api.call<Order>(path);
   }
-  applyCapture(service,checkout,order,api.merchant,api.origin);
+  await applyCapture(service,checkout,order,api.merchant,api.origin);
 }
 
 export async function captureCheckout(service:Marketplace,user:User,id:string,orderId:unknown){
-  service.owned(user,id);
-  const checkout=payment(service,id);
+  await service.owned(user,id);
+  const checkout=await payment(service.db,id);
   if(!checkout?.paypal_order_id||checkout.paypal_order_id!==orderId)throw new ApiError(404,'PayPal order not found.');
   if(!checkout.capture_id)await captureOrder(service,checkout,await client());
   return checkout.listing_id;
@@ -160,7 +152,7 @@ export async function paypalWebhook(service:Marketplace,headers:Headers,event:Re
   const resource=event.resource as {id?:string;supplementary_data?:{related_ids?:{order_id?:string}}}|undefined;
   const orderId=approved?resource?.id:resource?.supplementary_data?.related_ids?.order_id;
   if(typeof orderId!=='string')return;
-  const checkout=service.db.prepare('SELECT * FROM listing_payments WHERE paypal_order_id=?').get(orderId) as Checkout|undefined;
+  const checkout=await service.db.get<Checkout>('SELECT * FROM listing_payments WHERE paypal_order_id=?',orderId);
   if(!checkout)return;
   const signature:Record<string,string>={};
   for(const key of ['auth_algo','cert_url','transmission_id','transmission_sig','transmission_time']){
@@ -176,7 +168,7 @@ export async function paypalWebhook(service:Marketplace,headers:Headers,event:Re
   if(approved){
     await captureOrder(service,checkout,api);
   }else if(!checkout.capture_id){
-    applyCapture(service,checkout,await api.call<Order>(orderPath(orderId)),api.merchant,api.origin);
+    await applyCapture(service,checkout,await api.call<Order>(orderPath(orderId)),api.merchant,api.origin);
   }
   return checkout.listing_id;
 }
