@@ -86,7 +86,7 @@ export class Marketplace {
 
   async listingsForOperators(user:User){
     await this.requireOperator(user);
-    const rows=await this.db.all<Row&{seller_email:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,
+    const rows=await this.db.all<Row&{seller_email:string;seller_name:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,u.name AS seller_name,
       (SELECT json_group_array(DISTINCT event_type) FROM listing_payment_incidents i
         WHERE i.capture_id=p.capture_id) AS payment_incidents,
       EXISTS(SELECT 1 FROM listings other
@@ -104,7 +104,7 @@ export class Marketplace {
       const flags:string[]=[];
       if(row.similar)flags.push('Another listing has the same make, model and location.');
       if(!listing.data.history)flags.push('The seller did not provide service or ownership history.');
-      return {...listing,sellerEmail:row.seller_email,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
+      return {...listing,sellerEmail:row.seller_email,sellerName:row.seller_name,expiresAt:row.expires_at,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
     }));
   }
 
@@ -201,12 +201,12 @@ export class Marketplace {
     });
   }
 
-  async photo(photoId:string,user?:User){
+  async photo(photoId:string,user?:User,operatorAccess=false){
     const p=await this.db.get<{bytes:ArrayBuffer}>(`SELECT p.bytes FROM photos p JOIN listings l ON l.id=p.listing_id
       WHERE p.id=? AND (l.owner_id=? OR (l.state='published' AND l.expires_at>?)
       OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?)
         AND EXISTS(SELECT 1 FROM listing_payments lp JOIN listing_payment_incidents i
-          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),user?.id??null);
+          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),operatorAccess?user?.id??null:null);
     if(!p)throw new ApiError(404,'Photograph not found.');
     return new Uint8Array(p.bytes);
   }

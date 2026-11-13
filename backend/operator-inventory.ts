@@ -1,6 +1,7 @@
 import {ApiError,Marketplace,text,type User} from './service.ts';
 
 export type Classification = 'genuine'|'demo'|'unclassified';
+export type ListingContact = {name:string;email:string;phone:string;package:string;durationDays:number|null;expires:string|null};
 export type WordPressMachine = {
   id:number;
   title:string;
@@ -11,9 +12,11 @@ export type WordPressMachine = {
   paymentStatus:string|null;
   classification:Classification;
   note:string;
+  image?:string;
+  contact?:ListingContact;
 };
 
-type Snapshot = {capturedAt:string;machines:Omit<WordPressMachine,'classification'|'note'>[]};
+type Snapshot = {capturedAt:string;machines:Omit<WordPressMachine,'classification'|'note'|'contact'>[]};
 
 function snapshot(){
   const raw=process.env.MARKETPLACE_WORDPRESS_INVENTORY;
@@ -26,13 +29,18 @@ export async function wordpressInventory(service:Marketplace){
   const labels=await service.db.all<{product_id:number;label:Classification;note:string}>(
     'SELECT product_id,label,note FROM wordpress_inventory_labels');
   const byId=new Map(labels.map(label=>[label.product_id,label]));
-  return {...inventory,machines:inventory.machines.map(machine=>({
-    ...machine,
-    classification:byId.get(machine.id)?.label??(machine.source==='laser_market_form'?'genuine':'demo'),
-    note:byId.get(machine.id)?.note??(machine.source==='laser_market_form'
-      ?'Submitted through the Laser Market form.'
-      :'No Laser Market form submission. Classified as a placeholder by the site owner’s rule.')
-  }))};
+  const rawContacts=process.env.MARKETPLACE_WORDPRESS_CONTACTS;
+  const contacts=rawContacts?JSON.parse(rawContacts) as Record<string,ListingContact>:{};
+  return {...inventory,machines:inventory.machines.map(machine=>{
+    const classification=byId.get(machine.id)?.label??(machine.source==='laser_market_form'?'genuine':'demo');
+    return {
+      ...machine,classification,
+      note:byId.get(machine.id)?.note??(machine.source==='laser_market_form'
+        ?'Submitted through the Laser Market form.'
+        :'No Laser Market form submission. Classified as a placeholder by the site owner’s rule.'),
+      contact:classification==='genuine'?contacts[machine.id]:undefined
+    };
+  })};
 }
 
 export async function labelWordPressMachine(service:Marketplace,user:User,id:string,input:Record<string,unknown>){

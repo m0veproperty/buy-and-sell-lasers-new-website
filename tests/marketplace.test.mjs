@@ -227,7 +227,7 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   const [held]=await s.listingsForOperators(operator.user);
   assert.deepEqual(held.paymentIncidents,['PAYMENT.CAPTURE.REFUNDED']);
   await assert.rejects(s.photo(photo),status(404));
-  assert.deepEqual(await s.photo(photo,operator.user),new Uint8Array([1]));
+  assert.deepEqual(await s.photo(photo,operator.user,true),new Uint8Array([1]));
 });
 
 test('only operators can classify WordPress inventory and labels persist',async t=>{
@@ -249,4 +249,29 @@ test('only operators can classify WordPress inventory and labels persist',async 
   await labelWordPressMachine(service,operator.user,'5390',{classification:'genuine',note:'Verified exception'});
   assert.equal((await wordpressInventory(service)).machines[0].classification,'genuine');
   assert.equal((await db.get('SELECT operator_id FROM wordpress_inventory_labels')).operator_id,operator.user.id);
+});
+
+test('portal PIN locks an operator after three failures across sessions',async t=>{
+  const {scryptSync}=await import('node:crypto');
+  const {requirePortalPin,unlockPortal}=await import('../backend/portal-pin.ts');
+  const {db,service}=await setup();
+  t.after(()=>db.close());
+  const [seller,operator]=await users(service);
+  await db.run('INSERT INTO listing_operators VALUES(?)',operator.user.id);
+  const key='MARKETPLACE_PORTAL_PIN_HASH',previous=process.env[key];
+  t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
+  const salt='0'.repeat(32);
+  process.env[key]=salt+':'+scryptSync('123456',salt,64).toString('hex');
+  const second=await service.newSession(operator.user.id);
+  await assert.rejects(requirePortalPin(service,seller.user,seller.token),status(403));
+  await assert.rejects(requirePortalPin(service,operator.user,operator.token),status(428));
+  await assert.rejects(unlockPortal(service,operator.user,operator.token,'000000'),status(403));
+  await unlockPortal(service,operator.user,operator.token,'123456');
+  await requirePortalPin(service,operator.user,operator.token);
+  await assert.rejects(requirePortalPin(service,operator.user,second),status(428));
+  await assert.rejects(unlockPortal(service,operator.user,second,'000000'),status(403));
+  await assert.rejects(unlockPortal(service,operator.user,second,'000000'),status(403));
+  await assert.rejects(unlockPortal(service,operator.user,second,'000000'),status(423));
+  await assert.rejects(unlockPortal(service,operator.user,operator.token,'123456'),status(423));
+  await assert.rejects(requirePortalPin(service,operator.user,operator.token),status(423));
 });

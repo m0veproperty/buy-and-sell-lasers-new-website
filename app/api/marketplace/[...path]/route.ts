@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
 import {sendPublicationEmail,retryPublicationEmails} from '@/backend/publication-email';
 import {labelWordPressMachine,wordpressInventory} from '@/backend/operator-inventory';
+import {requirePortalPin,unlockPortal} from '@/backend/portal-pin';
 import sharp from 'sharp';
 import {getStore} from '@/backend/store';
 import {startCheckout,captureCheckout,paypalWebhook} from '@/backend/paypal';
@@ -57,11 +58,21 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
     }
     if(method==='POST'&&key==='auth/logout'){await service.logout(token);const res=response({ok:true});res.cookies.set(cookieName,'',{maxAge:0,path:'/'});return res;}
     if(method==='GET'&&key==='listings')return response({listings:await service.published()});
-    if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=await service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}const data=await service.photo(path[1],user);return new NextResponse(new Uint8Array(data),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
+    if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=await service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}let operatorAccess=false;
+      if(user&&token){
+        try{await requirePortalPin(service,user,token);operatorAccess=true;}catch(e){if(!(e instanceof ApiError))throw e;}
+      }
+      const data=await service.photo(path[1],user,operatorAccess);return new NextResponse(new Uint8Array(data),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
     if(method==='POST'&&path[0]==='enquiries'&&path.length===2){await service.rate('enquiry-global',100);const data=await json(req);await service.rate('enquiry:'+String(data.email).toLowerCase(),5);return response(await service.enquire(path[1],data),201);}
     if(method==='POST'&&key==='contact'){await service.rate('contact-global',50);const data=await json(req);await service.rate('contact:'+String(data.email).toLowerCase(),5);return response(await service.contact(data),201);}
     const user=await service.user(token);
     if(method==='GET'&&key==='account')return response({user,listings:await service.mine(user),enquiries:await service.inbox(user)});
+    if(method==='POST'&&key==='operator/unlock'){
+      await service.rate('portal-unlock:'+user.id,15);
+      await unlockPortal(service,user,token!,(await json(req)).pin);
+      return response({ok:true});
+    }
+    if(path[0]==='operator')await requirePortalPin(service,user,token!);
     if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(user),wordpress:await wordpressInventory(service)});
     if(method!=='GET')await service.rate('write:'+user.id,100);
     if(method==='PATCH'&&path.length===3&&path[0]==='operator'&&path[1]==='wordpress'){
