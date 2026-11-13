@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect,useState} from 'react';
+import {useEffect,useState,type FormEvent} from 'react';
 import {Boxes, ExternalLink, LayoutGrid, ShieldCheck} from 'lucide-react';
 import WordPressInventory from './WordPressInventory';
 import PortalThumbnail from './PortalThumbnail';
@@ -25,15 +25,47 @@ type Inventory = {capturedAt:string;machines:WordPressMachine[]};
 export default function OperatorListings(){
   const [result,setResult]=useState<{listings:OperatorListing[];wordpress:Inventory|null}|null>(null);
   const [error,setError]=useState('');
+  const [needsPin,setNeedsPin]=useState(false);
+  const [locked,setLocked]=useState(false);
+  const [busy,setBusy]=useState(false);
+
+  async function load(signal?:AbortSignal){
+    const response=await fetch('/api/marketplace/operator/listings',{cache:'no-store',signal});
+    const data=await response.json();
+    if(response.status===428){setNeedsPin(true);return;}
+    if(response.status===423)setLocked(true);
+    if(!response.ok)throw new Error(data.error);
+    setNeedsPin(false);
+    setResult(data);
+  }
+
   useEffect(()=>{
     const controller=new AbortController();
-    fetch('/api/marketplace/operator/listings',{cache:'no-store',signal:controller.signal}).then(async response=>{
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.error);
-      setResult(data);
-    }).catch(error=>{if(!controller.signal.aborted)setError(error.message);});
+    void load(controller.signal).catch(error=>{if(!controller.signal.aborted)setError(error.message);});
     return ()=>controller.abort();
   },[]);
+
+  async function unlock(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const form=event.currentTarget;
+    const pin=new FormData(form).get('pin');
+    form.reset();
+    setError('');
+    setBusy(true);
+    try{
+      const response=await fetch('/api/marketplace/operator/unlock',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})
+      });
+      const data=await response.json();
+      if(response.status===423)setLocked(true);
+      if(!response.ok)throw new Error(data.error);
+      await load();
+    }catch(error){
+      setError(error instanceof Error?error.message:'Unable to unlock the portal.');
+    }finally{
+      setBusy(false);
+    }
+  }
 
   return <div className="portal">
     <aside className="portal-sidebar">
@@ -46,8 +78,16 @@ export default function OperatorListings(){
     </aside>
     <main id="inventory" className="portal-main">
       <header className="portal-heading"><h1>Machine inventory</h1><p>Review listing provenance, seller details and publication dates.</p></header>
-      {error&&<div className="portal-panel" role="alert">{error} <a href="/account">Sign in to your account</a></div>}
-      {!result&&!error&&<p role="status">Loading inventory…</p>}
+      {error&&<div className="portal-panel" role="alert">{error} {!needsPin&&!locked&&<a href="/account">Sign in to your account</a>}</div>}
+      {needsPin&&!locked&&<section className="portal-panel portal-pin">
+        <h2>Unlock the portal</h2>
+        <p>Enter your six-digit PIN. Three incorrect attempts lock access.</p>
+        <form onSubmit={unlock}>
+          <label>Portal PIN<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoFocus/></label>
+          <button disabled={busy}>Unlock</button>
+        </form>
+      </section>}
+      {!result&&!error&&!needsPin&&!locked&&<p role="status">Loading inventory…</p>}
       {result&&<>
         <WordPressInventory inventory={result.wordpress}/>
         <section id="new-site" className="portal-panel">

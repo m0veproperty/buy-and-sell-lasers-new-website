@@ -63,3 +63,6 @@
   .portal-public { margin-top: 0; }
   .portal-filters,.portal-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+.portal-pin { max-width: 390px; }
+.portal-pin form { margin-top: 15px; }
+.portal-pin input { max-width: 170px; letter-spacing: .22em; }

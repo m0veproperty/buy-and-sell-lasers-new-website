@@ -201,12 +201,12 @@ export class Marketplace {
     });
   }
 
-  async photo(photoId:string,user?:User){
+  async photo(photoId:string,user?:User,operatorAccess=false){
     const p=await this.db.get<{bytes:ArrayBuffer}>(`SELECT p.bytes FROM photos p JOIN listings l ON l.id=p.listing_id
       WHERE p.id=? AND (l.owner_id=? OR (l.state='published' AND l.expires_at>?)
       OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?)
         AND EXISTS(SELECT 1 FROM listing_payments lp JOIN listing_payment_incidents i
-          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),user?.id??null);
+          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),operatorAccess?user?.id??null:null);
     if(!p)throw new ApiError(404,'Photograph not found.');
     return new Uint8Array(p.bytes);
   }
