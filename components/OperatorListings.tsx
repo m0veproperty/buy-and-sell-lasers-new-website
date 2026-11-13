@@ -1,6 +1,8 @@
 'use client';
 
 import {useEffect,useState} from 'react';
+import WordPressInventory from './WordPressInventory';
+import type {WordPressMachine} from '@/backend/operator-inventory';
 import {PageIntro} from './SiteShell';
 import type {Machine} from '@/backend/service';
 
@@ -18,6 +20,7 @@ const endpoint='/api/marketplace/operator/listings';
 
 export default function OperatorListings(){
   const [listings,setListings]=useState<OperatorListing[]|null>(null);
+  const [wordpress,setWordPress]=useState<{capturedAt:string;machines:WordPressMachine[]}|null>(null);
   const [error,setError]=useState('');
 
   async function load(){
@@ -25,15 +28,17 @@ export default function OperatorListings(){
     const result=await response.json();
     if(!response.ok)throw new Error(result.error);
     setListings(result.listings);
+    setWordPress(result.wordpress);
   }
 
   useEffect(()=>{void load().catch(error=>setError(error.message));},[]);
 
   return <>
-    <PageIntro label="Operator portal" title="Listing oversight" description="Inspect live listings, authenticity flags and payment holds."/>
+    <PageIntro label="Operator portal" title="Machine inventory" description="Check listing provenance and manage marketplace follow-up."/>
     <section className="account-page page-width">
       {error&&<p className="account-alert" role="alert">{error} <a href="/account">Seller sign-in</a></p>}
       {listings===null&&!error&&<p role="status">Loading listings…</p>}
+      {listings&&<><WordPressInventory inventory={wordpress}/><h2>New-site listings</h2></>}
       {listings?.length===0&&<p>No listings are live or on payment hold.</p>}
       {listings?.map(listing=><article className="account-editor" key={listing.id}>
         <h2>{listing.data.make} {listing.data.model}</h2>

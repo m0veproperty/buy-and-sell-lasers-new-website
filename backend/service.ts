@@ -78,10 +78,14 @@ export class Marketplace {
     if(token)await this.db.run('DELETE FROM sessions WHERE token_hash=?',hash(token));
   }
 
-  async listingsForOperators(user:User){
+  async requireOperator(user:User){
     if(!await this.db.get('SELECT 1 FROM listing_operators WHERE user_id=?',user.id)){
       throw new ApiError(403,'Operator access is required.');
     }
+  }
+
+  async listingsForOperators(user:User){
+    await this.requireOperator(user);
     const rows=await this.db.all<Row&{seller_email:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,
       (SELECT json_group_array(DISTINCT event_type) FROM listing_payment_incidents i
         WHERE i.capture_id=p.capture_id) AS payment_incidents,

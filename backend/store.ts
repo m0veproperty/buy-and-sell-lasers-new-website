@@ -17,6 +17,13 @@ const schema=`
     CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,hits INTEGER NOT NULL,reset_at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS rate_limit_expiry ON rate_limits(reset_at);
     CREATE TABLE IF NOT EXISTS listing_operators(user_id TEXT PRIMARY KEY REFERENCES users(id));
+    CREATE TABLE IF NOT EXISTS wordpress_inventory_labels(
+      product_id INTEGER PRIMARY KEY,
+      label TEXT NOT NULL CHECK(label IN ('genuine','demo','unclassified')),
+      note TEXT NOT NULL,
+      operator_id TEXT NOT NULL REFERENCES users(id),
+      updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS listing_payments(
       listing_id TEXT PRIMARY KEY REFERENCES listings(id),
       request_id TEXT NOT NULL UNIQUE,
