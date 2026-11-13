@@ -4,7 +4,8 @@ import {ArrowUpRight,ArrowDown,Plus,Minus,ChevronDown,Menu,X,Check,MapPin,ScanLi
 import {listings,money,origin,Listing,categories} from '@/lib/listings';
 import LaserExperience from './LaserExperience';
 import TubeCursor from './TubeCursor';
-import {EquipmentBrowser,Selling,Testimonials,Enquiry,Faq,Closing,FooterLinks} from './Journey';
+import EquipmentBrowser from './EquipmentBrowser';
+import {Selling,Testimonials,Enquiry,Faq,Closing,FooterLinks} from './Journey';
 
 function Brand({light=false}:{light?:boolean}){return <a href="#top" className={`brand ${light?'brand-light':''}`} aria-label="Buy and Sell Lasers home"><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M5 5h10v10H5zM21 5h10v10H21zM5 21h10v10H5zM21 21h10v10H21z"/><path className="brand-beam" d="M16 0h4v36h-4z"/></svg><span>buy & sell<span className="brand-second">lasers<span className="brand-dot">®</span></span></span></a>}
 function Action({children,href,className=''}:{children:React.ReactNode;href:string;className?:string}){return <a className={`action ${className}`} href={href}><span>{children}</span><ArrowUpRight size={18}/></a>}

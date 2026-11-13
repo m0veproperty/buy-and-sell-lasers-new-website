@@ -23,13 +23,13 @@ function snapshot(){
   return raw?JSON.parse(raw) as Snapshot:null;
 }
 
-export async function wordpressInventory(service:Marketplace){
+export async function wordpressInventory(service:Marketplace,{includeContacts=true}={}){
   const inventory=snapshot();
   if(!inventory)return null;
   const labels=await service.db.all<{product_id:number;label:Classification;note:string}>(
     'SELECT product_id,label,note FROM wordpress_inventory_labels');
   const byId=new Map(labels.map(label=>[label.product_id,label]));
-  const rawContacts=process.env.MARKETPLACE_WORDPRESS_CONTACTS;
+  const rawContacts=includeContacts?process.env.MARKETPLACE_WORDPRESS_CONTACTS:undefined;
   const contacts=rawContacts?JSON.parse(rawContacts) as Record<string,ListingContact>:{};
   return {...inventory,machines:inventory.machines.map(machine=>{
     const classification=byId.get(machine.id)?.label??(machine.source==='laser_market_form'?'genuine':'demo');

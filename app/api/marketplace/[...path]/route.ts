@@ -3,6 +3,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {sendPublicationEmail,retryPublicationEmails} from '@/backend/publication-email';
 import {labelWordPressMachine,wordpressInventory} from '@/backend/operator-inventory';
 import {lockPortal,portalSessionSeconds,requirePortalPin,unlockPortal} from '@/backend/portal-pin';
+import {homeMachines} from '@/backend/home-machines';
 import sharp from 'sharp';
 import {getStore} from '@/backend/store';
 import {startCheckout,captureCheckout,paypalWebhook} from '@/backend/paypal';
@@ -81,6 +82,7 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
       res.cookies.set(cookieName,result.token,{httpOnly:true,sameSite:'strict',secure:Boolean(process.env.VERCEL)||new URL(req.url).protocol==='https:',path:'/',maxAge:604800});return res;
     }
     if(method==='POST'&&key==='auth/logout'){await service.logout(token);const res=response({ok:true});res.cookies.set(cookieName,'',{maxAge:0,path:'/'});return res;}
+    if(method==='GET'&&key==='home-machines')return response({machines:await homeMachines(service)});
     if(method==='GET'&&key==='listings')return response({listings:await service.published()});
     if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=await service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}let operatorAccess=false;
       if(portalToken){
