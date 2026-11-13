@@ -86,7 +86,7 @@ export class Marketplace {
 
   async listingsForOperators(user:User){
     await this.requireOperator(user);
-    const rows=await this.db.all<Row&{seller_email:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,
+    const rows=await this.db.all<Row&{seller_email:string;seller_name:string;similar:number;payment_incidents:string}>(`SELECT l.*,u.email AS seller_email,u.name AS seller_name,
       (SELECT json_group_array(DISTINCT event_type) FROM listing_payment_incidents i
         WHERE i.capture_id=p.capture_id) AS payment_incidents,
       EXISTS(SELECT 1 FROM listings other
@@ -104,7 +104,7 @@ export class Marketplace {
       const flags:string[]=[];
       if(row.similar)flags.push('Another listing has the same make, model and location.');
       if(!listing.data.history)flags.push('The seller did not provide service or ownership history.');
-      return {...listing,sellerEmail:row.seller_email,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
+      return {...listing,sellerEmail:row.seller_email,sellerName:row.seller_name,expiresAt:row.expires_at,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
     }));
   }
 
