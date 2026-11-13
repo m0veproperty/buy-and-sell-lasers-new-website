@@ -32,7 +32,7 @@ export default function OperatorListings(){
   async function load(signal?:AbortSignal){
     const response=await fetch('/api/marketplace/operator/listings',{cache:'no-store',signal});
     const data=await response.json();
-    if(response.status===428){setNeedsPin(true);return;}
+    if(response.status===428){setResult(null);setNeedsPin(true);return;}
     if(response.status===423)setLocked(true);
     if(!response.ok)throw new Error(data.error);
     setNeedsPin(false);
@@ -67,6 +67,18 @@ export default function OperatorListings(){
     }
   }
 
+  async function lock(){
+    try{
+      const response=await fetch('/api/marketplace/operator/lock',{method:'POST'});
+      if(!response.ok)throw new Error('Could not lock the portal.');
+      setResult(null);
+      setError('');
+      setNeedsPin(true);
+    }catch(error){
+      setError(error instanceof Error?error.message:'Could not lock the portal.');
+    }
+  }
+
   return <div className="portal">
     <aside className="portal-sidebar">
       <div className="portal-brand"><span><Boxes size={21}/></span><div>Buy &amp; Sell Lasers<small>Administration</small></div></div>
@@ -74,11 +86,12 @@ export default function OperatorListings(){
         <a href="#inventory"><LayoutGrid size={17}/> Machine inventory</a>
         <a href="#new-site"><ShieldCheck size={17}/> New-site listings</a>
       </nav>
+      {result&&<button className="portal-lock" onClick={lock}>Lock portal</button>}
       <a className="portal-public" href="/">View public site <ExternalLink size={15}/></a>
     </aside>
     <main id="inventory" className="portal-main">
       <header className="portal-heading"><h1>Machine inventory</h1><p>Review listing provenance, seller details and publication dates.</p></header>
-      {error&&<div className="portal-panel" role="alert">{error} {!needsPin&&!locked&&<a href="/account">Sign in to your account</a>}</div>}
+      {error&&<div className="portal-panel" role="alert">{error}</div>}
       {needsPin&&!locked&&<section className="portal-panel portal-pin">
         <h2>Unlock the portal</h2>
         <p>Enter your six-digit PIN. Three incorrect attempts lock access.</p>

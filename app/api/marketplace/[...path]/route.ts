@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
 import {sendPublicationEmail,retryPublicationEmails} from '@/backend/publication-email';
 import {labelWordPressMachine,wordpressInventory} from '@/backend/operator-inventory';
-import {requirePortalPin,unlockPortal} from '@/backend/portal-pin';
+import {lockPortal,portalSessionSeconds,requirePortalPin,unlockPortal} from '@/backend/portal-pin';
 import sharp from 'sharp';
 import {getStore} from '@/backend/store';
 import {startCheckout,captureCheckout,paypalWebhook} from '@/backend/paypal';
@@ -11,6 +11,7 @@ import {ApiError,Marketplace} from '@/backend/service';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const cookieName='laser_session';
+const portalCookie='laser_portal';
 
 async function bytes(request:Request,max:number) {
   if(Number(request.headers.get('content-length'))>max)throw new ApiError(413,'File or request is too large.');
@@ -49,6 +50,29 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
       if(req.headers.get('origin')!==expected)throw new ApiError(403,'Request origin is not allowed.');
     }
     const service=new Marketplace(await getStore()),token=req.cookies.get(cookieName)?.value;
+    const portalToken=req.cookies.get(portalCookie)?.value;
+    if(path[0]==='operator'){
+      const options={httpOnly:true,sameSite:'strict' as const,secure:Boolean(process.env.VERCEL)||req.nextUrl.protocol==='https:',path:'/api/marketplace'};
+      if(method==='POST'&&key==='operator/unlock'){
+        const unlocked=await unlockPortal(service,(await json(req)).pin);
+        const res=response({ok:true});
+        res.cookies.set(portalCookie,unlocked,{...options,maxAge:portalSessionSeconds});
+        return res;
+      }
+      if(method==='POST'&&key==='operator/lock'){
+        await lockPortal(service,portalToken);
+        const res=response({ok:true});
+        res.cookies.set(portalCookie,'',{...options,maxAge:0});
+        return res;
+      }
+      const actor=await requirePortalPin(service,portalToken);
+      if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(actor),wordpress:await wordpressInventory(service)});
+      if(method==='PATCH'&&path.length===3&&path[1]==='wordpress'){
+        await service.rate('portal-write:'+actor.id,100);
+        return response(await labelWordPressMachine(service,actor,path[2],await json(req)));
+      }
+      throw new ApiError(404,'Endpoint not found.');
+    }
     if(method==='POST'&&(key==='auth/register'||key==='auth/login')){
       await service.rate('auth-global',100);
       const data=await json(req);await service.rate('auth:'+String(data.email).trim().toLowerCase(),10);
@@ -59,25 +83,15 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
     if(method==='POST'&&key==='auth/logout'){await service.logout(token);const res=response({ok:true});res.cookies.set(cookieName,'',{maxAge:0,path:'/'});return res;}
     if(method==='GET'&&key==='listings')return response({listings:await service.published()});
     if(method==='GET'&&path[0]==='photos'&&path.length===2){let user;try{user=await service.user(token);}catch(e){if(!(e instanceof ApiError&&e.status===401))throw e;}let operatorAccess=false;
-      if(user&&token){
-        try{await requirePortalPin(service,user,token);operatorAccess=true;}catch(e){if(!(e instanceof ApiError))throw e;}
+      if(portalToken){
+        try{user=await requirePortalPin(service,portalToken);operatorAccess=true;}catch(e){if(!(e instanceof ApiError))throw e;}
       }
       const data=await service.photo(path[1],user,operatorAccess);return new NextResponse(new Uint8Array(data),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
     if(method==='POST'&&path[0]==='enquiries'&&path.length===2){await service.rate('enquiry-global',100);const data=await json(req);await service.rate('enquiry:'+String(data.email).toLowerCase(),5);return response(await service.enquire(path[1],data),201);}
     if(method==='POST'&&key==='contact'){await service.rate('contact-global',50);const data=await json(req);await service.rate('contact:'+String(data.email).toLowerCase(),5);return response(await service.contact(data),201);}
     const user=await service.user(token);
     if(method==='GET'&&key==='account')return response({user,listings:await service.mine(user),enquiries:await service.inbox(user)});
-    if(method==='POST'&&key==='operator/unlock'){
-      await service.rate('portal-unlock:'+user.id,15);
-      await unlockPortal(service,user,token!,(await json(req)).pin);
-      return response({ok:true});
-    }
-    if(path[0]==='operator')await requirePortalPin(service,user,token!);
-    if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(user),wordpress:await wordpressInventory(service)});
     if(method!=='GET')await service.rate('write:'+user.id,100);
-    if(method==='PATCH'&&path.length===3&&path[0]==='operator'&&path[1]==='wordpress'){
-      return response(await labelWordPressMachine(service,user,path[2],await json(req)));
-    }
     if(method==='POST'&&key==='listings')return response({listing:await service.save(user,await json(req))},201);
     if(path[0]==='listings'&&path.length>=2){
       const id=path[1];
