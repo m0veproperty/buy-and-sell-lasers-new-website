@@ -229,3 +229,23 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   await assert.rejects(s.photo(photo),status(404));
   assert.deepEqual(await s.photo(photo,operator.user),new Uint8Array([1]));
 });
+
+test('only operators can classify WordPress inventory and labels persist',async t=>{
+  const {wordpressInventory,labelWordPressMachine}=await import('../backend/operator-inventory.ts');
+  const {db,service}=await setup();
+  t.after(()=>db.close());
+  const [seller,operator]=await users(service);
+  const key='MARKETPLACE_WORDPRESS_INVENTORY';
+  const previous=process.env[key];
+  t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
+  process.env[key]=JSON.stringify({capturedAt:'2026-11-13',machines:[
+    {id:5390,title:'Example',slug:'example',status:'publish',source:'woocommerce_converted',pluginStatus:'approved',paymentStatus:'completed'}
+  ]});
+  assert.equal((await wordpressInventory(service)).machines[0].classification,'unclassified');
+  await assert.rejects(labelWordPressMachine(service,seller.user,'5390',{classification:'demo',note:'Confirmed'}),status(403));
+  await db.run('INSERT INTO listing_operators VALUES(?)',operator.user.id);
+  await assert.rejects(labelWordPressMachine(service,operator.user,'5390',{classification:'demo',note:''}),status(400));
+  await labelWordPressMachine(service,operator.user,'5390',{classification:'demo',note:'Confirmed placeholder'});
+  assert.equal((await wordpressInventory(service)).machines[0].classification,'demo');
+  assert.equal((await db.get('SELECT operator_id FROM wordpress_inventory_labels')).operator_id,operator.user.id);
+});
