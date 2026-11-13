@@ -206,7 +206,7 @@ export class Marketplace {
       WHERE p.id=? AND (l.owner_id=? OR (l.state='published' AND l.expires_at>?)
       OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?)
         AND EXISTS(SELECT 1 FROM listing_payments lp JOIN listing_payment_incidents i
-          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,user?.id??null,Date.now(),operatorAccess?user?.id??null:null);
+          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,operatorAccess?null:user?.id??null,Date.now(),operatorAccess?user?.id??null:null);
     if(!p)throw new ApiError(404,'Photograph not found.');
     return new Uint8Array(p.bytes);
   }
