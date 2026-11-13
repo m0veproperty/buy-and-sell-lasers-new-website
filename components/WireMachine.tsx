@@ -32,7 +32,9 @@ export default function WireMachine({progress}:{progress:number}){
    const blue=new T.MeshBasicMaterial({color:0x246bd0,wireframe:true,transparent:true,opacity:.38,depthWrite:false});
    const navy=new T.MeshBasicMaterial({color:0x183d6b,wireframe:true,transparent:true,opacity:.3,depthWrite:false});
    const lineMaterial=new T.LineBasicMaterial({color:0x2b659d,transparent:true,opacity:.65});
-   const enamel=new T.MeshStandardMaterial({color:0xe6f4ff,metalness:.2,roughness:.55,transparent:true,opacity:.15,depthWrite:false});
+   const enamel=new T.MeshStandardMaterial({color:0xe6f4ff,metalness:.2,roughness:.55,transparent:true,opacity:.27,depthWrite:false});
+   const trim=new T.MeshStandardMaterial({color:0x144573,metalness:.55,roughness:.3});
+   const accent=new T.MeshStandardMaterial({color:0x168fea,emissive:0x0567bc,emissiveIntensity:.55,metalness:.25,roughness:.28});
    const detail=new T.MeshBasicMaterial({color:0x3577b5,transparent:true,opacity:.35,wireframe:true,depthWrite:false});
    const part=(geometry:BufferGeometry,material:InstanceType<typeof T.Material>,parent:InstanceType<typeof T.Group>=model)=>{const mesh=new T.Mesh(geometry,material);mesh.castShadow=true;parent.add(mesh);const edges=new T.LineSegments(new T.EdgesGeometry(geometry,30),lineMaterial);mesh.add(edges);return mesh;};
    const box=(w:number,h:number,d:number,x:number,y:number,z:number,mat:InstanceType<typeof T.Material>=shell,r=.08,parent:InstanceType<typeof T.Group>=model)=>{const mesh=part(new RoundedBoxGeometry(w,h,d,3,r),mat,parent);mesh.position.set(x,y,z);return mesh;};
@@ -41,29 +43,38 @@ export default function WireMachine({progress}:{progress:number}){
    box(1.25,3.04,1.03,0,-.18,0,shell,.17);
    box(1.24,3.03,1.02,0,-.18,0,enamel,.17);
    for(const x of [-.52,.52])box(.018,2.75,.018,x,-.18,.51,detail,.004);
-   box(1.04,.11,.12,0,.88,.57,blue,.05);
+   box(1.04,.11,.12,0,.88,.57,accent,.05);
    box(.38,.12,.3,0,1.37,-.08,navy,.04);
    const head=new T.Group();head.position.set(0,1.72,-.03);head.rotation.x=-.36;model.add(head);
-   box(1.4,.93,.13,0,0,0,navy,.07,head);
+   box(1.4,.93,.13,0,0,0,trim,.07,head);
    box(1.23,.75,.025,0,0,.08,shell,.035,head);
    const ring=part(new T.TorusGeometry(.14,.009,6,36),blue,head);ring.position.set(-.3,.02,.1);
    for(let i=0;i<4;i++)box(.4-i*.04,.014,.012,.24,.13-i*.085,.1,blue,.003,head);
+   for(const x of [-.49,.49])for(const y of [-.29,.29]){
+    const screw=part(new T.CylinderGeometry(.023,.023,.014,10),trim,head);
+    screw.rotation.x=Math.PI/2;screw.position.set(x,y,.102);
+   }
+   box(.25,.014,.016,-.3,-.25,.104,accent,.003,head);
+   box(.1,.014,.016,.4,-.25,.104,accent,.003,head);
    // Body panel seams, cooling slots and a front handpiece socket.
-   for(let i=0;i<15;i++)for(const x of [-.29,-.1,.1,.29])box(.075,.018,.012,x,-.77-i*.043,.521,detail,.003);
+   for(let i=0;i<15;i++)for(const x of [-.29,-.1,.1,.29])box(.075,.018,.012,x,-.77-i*.043,.521,trim,.003);
    for(let i=0;i<16;i++)box(.012,.018,.48,.631,-.62+i*.06,0,detail,.003);
    box(.24,.38,.09,-.26,.15,.56,navy,.06);
    box(.13,.035,.07,0,1.34,.45,blue,.01);
    // Four swept outriggers and swivel castors, rather than a solid trolley plinth.
    for(const x of [-1,1])for(const z of [-1,1]){
     tube([[x*.42,-1.65,z*.32],[x*.64,-1.74,z*.48],[x*.8,-1.8,z*.65]],.07,shell);
-    const fork=box(.18,.21,.17,x*.8,-1.91,z*.65,navy,.03);
+    box(.18,.21,.17,x*.8,-1.91,z*.65,navy,.03);
     const wheel=part(new T.CylinderGeometry(.16,.16,.11,20,1),navy);wheel.rotation.z=Math.PI/2;wheel.position.set(x*.8,-2.02,z*.65);
     const hub=part(new T.CylinderGeometry(.075,.075,.12,16),blue);hub.rotation.z=Math.PI/2;hub.position.copy(wheel.position);
    }
    const handpiece=(x:number,y:number,z:number)=>{const group=new T.Group();group.position.set(x,y,z);model.add(group);box(.14,.48,.16,0,0,0,shell,.04,group);box(.26,.26,.26,0,.32,.045,navy,.055,group);box(.17,.15,.018,0,.33,.185,blue,.025,group);box(.2,.08,.22,0,-.25,0,blue,.025,group);return group;};
+   for(const y of [.78,-1.46]){
+    box(.94,.024,.027,0,y,.522,accent,.008);
+   }
    handpiece(.82,1.04,.1);handpiece(-.26,.05,.73);
    box(.25,.065,.29,.73,.97,.1,blue,.025);
-   tube([[.82,.77,.1],[.99,.15,.15],[1.05,-1.66,.65],[.6,-2.12,1.05],[-.1,-2.03,1.08],[-.36,-1.24,.86],[-.26,-.2,.73]],.052);
+   tube([[.82,.77,.1],[.99,.15,.15],[1.05,-1.66,.65],[.6,-2.12,1.05],[-.1,-2.03,1.08],[-.36,-1.24,.86],[-.26,-.2,.73]],.052,trim);
    tube([[.58,.2,-.18],[.87,-.2,-.15],[.91,-.8,.03],[.86,.1,.18],[.82,.77,.1]],.026,detail);
    // Diagnostic internals appear more strongly as the cabinet opens on scroll.
    const internals=new T.Group();model.add(internals);
@@ -79,7 +90,7 @@ export default function WireMachine({progress}:{progress:number}){
    const setProgress=(p:number)=>{
     const turn=Math.min(1,Math.max(0,(p-.18)/.72));
     model.rotation.y=-.45+turn*Math.PI*1.65+(reduced.matches?0:Math.sin(idleTime*.28)*.65*Math.max(0,1-p/.35));
-    enamel.opacity=.15*(1-Math.min(1,Math.max(0,(p-.08)/.38)));
+    enamel.opacity=.27*(1-Math.min(1,Math.max(0,(p-.08)/.38)));
     internals.visible=p>.12;
     const explode=Math.max(0,Math.min(1,(p-.57)/.3));
     model.children.forEach((child,i)=>{child.position.copy(originals[i]);child.position.y+=Math.sign(originals[i].y)*explode*.48;if(Math.abs(originals[i].x)>.7)child.position.x+=Math.sign(originals[i].x)*explode*.25;});
