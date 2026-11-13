@@ -1,0 +1,131 @@
+.seller-showcase {
+  color: #132d57;
+  background: radial-gradient(ellipse at 27% 46%, #dbeafe 0%, transparent 52%), #f3f8fd;
+  padding-block: clamp(3rem, 6vw, 7rem);
+}
+
+.seller-showcase-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 5rem);
+  max-width: 1640px;
+}
+
+.seller-showcase-art {
+  width: 100%;
+  height: auto;
+}
+
+.seller-showcase-copy .eyebrow {
+  color: #496b9c;
+}
+
+.seller-showcase-copy .eyebrow > span {
+  background: #0664ed;
+  box-shadow: 0 0 10px #64a8ff;
+}
+
+.seller-showcase-copy h2 {
+  margin-top: .85rem;
+  font-size: clamp(2.25rem, 3.6vw, 4.5rem);
+  font-weight: 650;
+  line-height: 1.04;
+}
+
+.seller-showcase-copy h2 em {
+  color: #075edc;
+}
+
+.seller-showcase-intro {
+  margin-top: 1.15rem;
+  max-width: 41rem;
+  font-size: clamp(.95rem, 1.2vw, 1.2rem);
+  color: #405d87;
+}
+
+.seller-showcase-steps {
+  list-style: none;
+  padding: 0;
+  margin: 1.1rem 0 1.7rem;
+}
+
+.seller-showcase-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(.75rem, 1.6vw, 1.5rem);
+  align-items: center;
+}
+
+.seller-showcase-steps li > div {
+  padding-block: .95rem;
+  border-bottom: 1px solid #d5e3f5;
+}
+
+.seller-showcase-steps li:last-child > div {
+  border-bottom: 0;
+}
+
+.seller-showcase-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: .9rem;
+  background: #dfedfc;
+  color: #0961e2;
+}
+
+.seller-showcase-steps h3 {
+  font-size: 1.1rem;
+  letter-spacing: -.02em;
+}
+
+.seller-showcase-steps p {
+  margin-top: .35rem;
+  color: #49658a;
+  font-size: .9rem;
+}
+
+.seller-showcase-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem 1.5rem;
+}
+
+.seller-showcase-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: .75rem;
+  font-size: .9rem;
+  min-height: 44px;
+}
+
+.seller-showcase-actions .action {
+  padding: 1rem 1.5rem;
+  border-radius: 999px;
+  background: #075edc;
+  border-color: #075edc;
+  color: white;
+  box-shadow: 0 10px 24px #0961e229;
+}
+
+.seller-showcase-actions .action:hover {
+  background: #054bb0;
+}
+
+.seller-showcase-actions a:last-child:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 800px) {
+  .seller-showcase-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .seller-showcase-art {
+    max-width: 29rem;
+    margin-inline: auto;
+  }
+}

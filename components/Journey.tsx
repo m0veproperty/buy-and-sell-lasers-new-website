@@ -1,9 +1,36 @@
 'use client';
 import {useState} from 'react';
-import {ArrowUpRight,ArrowRight,Plus,Check,ClipboardCheck,FileText,Camera,MoveRight,CornerDownRight} from 'lucide-react';
+import {ArrowUpRight,ArrowRight,Plus,Check,ClipboardCheck,FileText,Layers,Camera,MoveRight,CornerDownRight} from 'lucide-react';
 import {Listing,money,origin} from '@/lib/listings';
+import './seller-showcase.css';
 function Label({children}:{children:React.ReactNode}){return <p className="eyebrow"><span/>{children}</p>}
-export function Selling(){return <section id="home.sell" className="selling-section section-shell"><div className="selling-layout"><div className="selling-visual" data-reveal><img src="/images/vcombo.webp" width="1000" height="1333" alt="All White Laser V Combo Plus equipment from an existing seller listing" loading="lazy"/><div className="selling-photo-label"><span>READY FOR ITS NEXT CHAPTER</span><ArrowUpRight size={22}/></div><div className="selling-number">A little preparation.<br/>A clearer listing.</div></div><div className="selling-copy" data-reveal><Label>MAKE ROOM FOR WHAT’S NEXT</Label><h2>Your machine.<br/>Someone’s<br/><span>next move.</span></h2><p>Upgrading your equipment or changing direction? Give another clinic a clear picture of what you have to offer. Start with honest details, useful photographs and the records a buyer will want to see.</p><ol className="selling-steps"><li><span>01</span><div><h3>Tell the whole story.</h3><p>Include the make, model, year and configuration. Describe use, wear and known faults clearly.</p></div><FileText size={19}/></li><li><span>02</span><div><h3>Put the details in focus.</h3><p>Photograph the machine, screen, handpieces and included accessories in good light.</p></div><Camera size={19}/></li><li><span>03</span><div><h3>Have the records ready.</h3><p>Gather service documents and a current usage reading so buyers know what to ask about.</p></div><ClipboardCheck size={19}/></li></ol><a href={'/sell-your-laser/'} className="action">Start your listing <ArrowUpRight size={17}/></a><a className="selling-guide" href={'/how-to-sell-your-laser-machine/'}>Read the selling guide <ArrowUpRight size={13}/></a></div></div></section>}
+export function Selling(){
+ const steps=[
+  {Icon:Layers,title:'Tell the whole story.',description:'Include the make, model, year and configuration, plus usage and known faults.'},
+  {Icon:Camera,title:'Put the details in focus.',description:'Add clear, well-lit photos of the machine, screen and key accessories.'},
+  {Icon:ClipboardCheck,title:'Have the records ready.',description:'Provide service history, documentation and any relevant test results.'},
+ ];
+ return <section id="home.sell" className="seller-showcase" aria-labelledby="seller-showcase-title">
+  <div className="section-shell seller-showcase-inner">
+   <img className="seller-showcase-art" src="/images/seller-showcase-laser.webp" width={900} height={900} alt="Illustration of a professional laser machine surrounded by blue ribbons of light" loading="lazy" decoding="async"/>
+   <div className="seller-showcase-copy">
+    <Label>MAKE ROOM FOR WHAT’S NEXT</Label>
+    <h2 id="seller-showcase-title">Your machine.<br/>Someone’s <em>next move.</em></h2>
+    <p className="seller-showcase-intro">Upgrading your equipment or changing direction? Give another clinic a clear picture of what you have to offer, with honest details, quality photos and the information buyers need to make a confident decision.</p>
+    <ul className="seller-showcase-steps">
+     {steps.map(({Icon,title,description})=><li key={title}>
+      <span className="seller-showcase-icon"><Icon size={27} aria-hidden="true"/></span>
+      <div><h3>{title}</h3><p>{description}</p></div>
+     </li>)}
+    </ul>
+    <div className="seller-showcase-actions">
+     <a href="/sell-your-laser/" className="action">Start your listing <ArrowUpRight size={18} aria-hidden="true"/></a>
+     <a href="/blog/">Read our buying guides <ArrowUpRight size={16} aria-hidden="true"/></a>
+    </div>
+   </div>
+  </div>
+ </section>;
+}
 export function Testimonials(){return <section id="home.testimonials" className="testimonial-section"><div className="section-shell testimonial-inner"><div><Label>THE PEOPLE BEHIND THE EQUIPMENT</Label><h2>Every machine.<br/>A different story.</h2><p className="placeholder-label">DESIGN PREVIEW · TESTIMONIAL PLACEHOLDERS</p></div><div className="testimonial-placeholder"><span className="quote-mark" aria-hidden="true">“</span><blockquote>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</blockquote><div className="quote-attribution"><span className="quote-avatar">—</span><p>Customer story to be supplied<small>Placeholder copy. Not a customer endorsement.</small></p></div></div></div></section>}
 const questions=[{id:'service',label:'Service history',detail:'Dated service records and details of the most recent service.',icon:FileText},{id:'accessories',label:'Included accessories',detail:'A complete list of handpieces, cables, stand and other accessories.',icon:Plus},{id:'condition',label:'Condition photographs',detail:'Recent close-ups of the screen, casing, handpieces and any faults.',icon:Camera},{id:'demo',label:'A demonstration',detail:'Options for seeing the equipment and asking about its operation.',icon:ScanLineIcon}];
 function ScanLineIcon({size=20}:{size?:number}){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5M3 12h18"/></svg>}
