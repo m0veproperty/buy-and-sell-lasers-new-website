@@ -280,3 +280,22 @@ test('PIN alone opens a separate portal session and three failures lock all sess
   await assert.rejects(requirePortalPin(service,second),status(423));
   assert.equal((await service.user(seller.token)).id,seller.user.id);
 });
+
+test('home machine groups follow published portal classifications and omit private fields',async t=>{
+  const {homeMachines}=await import('../backend/home-machines.ts');
+  const {db,service}=await setup();
+  t.after(()=>db.close());
+  const key='MARKETPLACE_WORDPRESS_INVENTORY',previous=process.env[key];
+  t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
+  process.env[key]=JSON.stringify({capturedAt:'2026-11-13',machines:[
+    {id:1,title:'Seller machine',status:'publish',source:'laser_market_form'},
+    {id:2,title:'Example',status:'publish',source:'woocommerce_converted'},
+    {id:3,title:'Draft',status:'draft',source:'laser_market_form'}
+  ]});
+  const machines=await homeMachines(service);
+  assert.equal(machines.length,2);
+  assert.equal(machines.find(machine=>machine.id==='wp-1').featured,true);
+  assert.equal(machines.find(machine=>machine.id==='wp-2').href,undefined);
+  assert.equal(machines.find(machine=>machine.id==='wp-2').price,null);
+  assert.equal(machines.some(machine=>'contact' in machine||'note' in machine),false);
+});
