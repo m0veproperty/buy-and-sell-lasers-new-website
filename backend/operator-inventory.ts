@@ -27,8 +27,11 @@ export async function wordpressInventory(service:Marketplace){
     'SELECT product_id,label,note FROM wordpress_inventory_labels');
   const byId=new Map(labels.map(label=>[label.product_id,label]));
   return {...inventory,machines:inventory.machines.map(machine=>({
-    ...machine,classification:byId.get(machine.id)?.label??'unclassified',
-    note:byId.get(machine.id)?.note??''
+    ...machine,
+    classification:byId.get(machine.id)?.label??(machine.source==='laser_market_form'?'genuine':'demo'),
+    note:byId.get(machine.id)?.note??(machine.source==='laser_market_form'
+      ?'Submitted through the Laser Market form.'
+      :'No Laser Market form submission. Classified as a placeholder by the site owner’s rule.')
   }))};
 }
 

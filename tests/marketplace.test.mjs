@@ -239,13 +239,14 @@ test('only operators can classify WordPress inventory and labels persist',async 
   const previous=process.env[key];
   t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
   process.env[key]=JSON.stringify({capturedAt:'2026-11-13',machines:[
-    {id:5390,title:'Example',slug:'example',status:'publish',source:'woocommerce_converted',pluginStatus:'approved',paymentStatus:'completed'}
+    {id:5390,title:'Example',slug:'example',status:'publish',source:'woocommerce_converted',pluginStatus:'approved',paymentStatus:'completed'},
+    {id:10203,title:'Form listing',slug:'form-listing',status:'publish',source:'laser_market_form',pluginStatus:'approved',paymentStatus:'completed'}
   ]});
-  assert.equal((await wordpressInventory(service)).machines[0].classification,'unclassified');
+  assert.deepEqual((await wordpressInventory(service)).machines.map(machine=>machine.classification),['demo','genuine']);
   await assert.rejects(labelWordPressMachine(service,seller.user,'5390',{classification:'demo',note:'Confirmed'}),status(403));
   await db.run('INSERT INTO listing_operators VALUES(?)',operator.user.id);
   await assert.rejects(labelWordPressMachine(service,operator.user,'5390',{classification:'demo',note:''}),status(400));
-  await labelWordPressMachine(service,operator.user,'5390',{classification:'demo',note:'Confirmed placeholder'});
-  assert.equal((await wordpressInventory(service)).machines[0].classification,'demo');
+  await labelWordPressMachine(service,operator.user,'5390',{classification:'genuine',note:'Verified exception'});
+  assert.equal((await wordpressInventory(service)).machines[0].classification,'genuine');
   assert.equal((await db.get('SELECT operator_id FROM wordpress_inventory_labels')).operator_id,operator.user.id);
 });

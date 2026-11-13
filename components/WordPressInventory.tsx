@@ -67,7 +67,7 @@ export default function WordPressInventory({inventory}:{inventory:Inventory|null
   return <section className="account-editor">
     <h2>WordPress inventory</h2>
     <p>{inventory.machines.length} machines · Snapshot taken {new Date(inventory.capturedAt).toLocaleDateString('en-GB',{timeZone:'Europe/London'})}</p>
-    <p>Plugin source shows how each listing entered WordPress. Record a classification when you have evidence it is genuine or a placeholder.</p>
+    <p>Laser Market form submissions are classified as genuine. Other WordPress listings are classified as placeholders. Operators can record a correction with an evidence note.</p>
     <div className="catalogue-filters">
       <label><span>Search machines</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Title or WordPress ID"/></label>
       <label><span>Classification</span><select value={classification} onChange={e=>setClassification(e.target.value)}>
@@ -82,6 +82,7 @@ export default function WordPressInventory({inventory}:{inventory:Inventory|null
         {Object.entries(sources).map(([value,name])=><option value={value} key={value}>{name}</option>)}
       </select></label>
     </div>
+    <p>{machines.filter(machine=>machine.classification==='genuine').length} genuine · {machines.filter(machine=>machine.classification==='demo').length} placeholders</p>
     <p role="status">{matches.length} matching machines</p>
     <div style={{overflowX:'auto'}}>
       <table className="operator-inventory">
