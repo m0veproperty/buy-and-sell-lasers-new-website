@@ -21,9 +21,10 @@ type OperatorListing = {
   flags:string[];
 };
 type Inventory = {capturedAt:string;machines:WordPressMachine[]};
+type Notification = {listing_id:string;kind:'approval_request'|'listing_live';recipient:string;subject:string;body:string;sent_at:number|null};
 
 export default function OperatorListings(){
-  const [result,setResult]=useState<{listings:OperatorListing[];wordpress:Inventory|null}|null>(null);
+  const [result,setResult]=useState<{listings:OperatorListing[];wordpress:Inventory|null;notifications:Notification[]}|null>(null);
   const [error,setError]=useState('');
   const [needsPin,setNeedsPin]=useState(false);
   const [locked,setLocked]=useState(false);
@@ -67,6 +68,18 @@ export default function OperatorListings(){
     }
   }
 
+  async function approve(id:string){
+    setBusy(true);setError('');
+    try{
+      const response=await fetch('/api/marketplace/operator/approve/'+encodeURIComponent(id),{method:'POST'});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error);
+      await load();
+    }catch(error){
+      setError(error instanceof Error?error.message:'Could not approve the listing.');
+    }finally{setBusy(false);}
+  }
+
   async function lock(){
     try{
       const response=await fetch('/api/marketplace/operator/lock',{method:'POST'});
@@ -85,6 +98,7 @@ export default function OperatorListings(){
       <nav aria-label="Portal navigation">
         <a href="#inventory"><LayoutGrid size={17}/> Machine inventory</a>
         <a href="#new-site"><ShieldCheck size={17}/> New-site listings</a>
+        <a href="#emails">Automated emails</a>
       </nav>
       {result&&<button className="portal-lock" onClick={lock}>Lock portal</button>}
       <a className="portal-public" href="/">View public site <ExternalLink size={15}/></a>
@@ -114,10 +128,20 @@ export default function OperatorListings(){
               <p>{listing.sellerName} · <a href={'mailto:'+listing.sellerEmail}>{listing.sellerEmail}</a></p>
               <p>{pack?pack.name+' · '+pack.durationDays+' days':'Duration unavailable'}{listing.expiresAt&&' · Ends '+new Date(listing.expiresAt).toLocaleDateString('en-GB',{timeZone:'Europe/London'})}</p>
               {listing.flags.length>0&&<ul>{listing.flags.map(flag=><li key={flag}>{flag}</li>)}</ul>}
+              {listing.state==='pending_review'&&<><p className="portal-hold">Paid · awaiting approval</p><p>{listing.data.description||'No seller description provided.'}</p><button disabled={busy||result.notifications.some(n=>n.listing_id===listing.id&&n.kind==='approval_request'&&!n.sent_at)} onClick={()=>approve(listing.id)}>Approve and publish</button></>}
               {listing.paymentIncidents.length>0&&<p className="portal-hold">Payment hold · {listing.paymentIncidents.map(event=>event.split('.').at(-1)?.toLowerCase()).join(', ')}</p>}
               {listing.state==='published'&&<a href={'/equipment/'+listing.id}>View live listing</a>}</div>
             </article>;
           })}
+        </section>
+        <section id="emails" className="portal-panel">
+          <h2>Automated emails</h2>
+          <p>Read-only record of the messages prepared for paid listings. Administrators receive an approval request first; the seller receives their product link after approval and publication.</p>
+          {!result.notifications.length&&<p>No listing emails have been queued yet.</p>}
+          {result.notifications.map((mail,index)=><details className="portal-email" key={mail.listing_id+mail.kind+mail.recipient+index}>
+            <summary><strong>{mail.kind==='approval_request'?'Administrator approval request':'Seller listing live'}</strong> · {mail.recipient} · {mail.sent_at?'Sent '+new Date(mail.sent_at).toLocaleString('en-GB',{timeZone:'Europe/London'}):'Queued'}</summary>
+            <p><strong>Subject:</strong> {mail.subject}</p><pre>{mail.body}</pre>
+          </details>)}
         </section>
       </>}
     </main>

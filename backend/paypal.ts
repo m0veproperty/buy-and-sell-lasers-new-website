@@ -78,7 +78,7 @@ export async function startCheckout(service:Marketplace,user:User,id:string){
     if(existing.id!==checkout.paypal_order_id)throw new ApiError(409,'This payment needs reconciliation.');
     if(existing.status==='COMPLETED'||existing.status==='APPROVED'){
       await captureOrder(service,checkout,api);
-      return {published:Boolean(await service.publishedListing(id))};
+      return {paid:Boolean((await payment(service.db,id))?.capture_id)};
     }
     if(existing.status!=='VOIDED')return {approvalUrl:checkout.approval_url};
     await service.db.run(`UPDATE listing_payments SET request_id=?,paypal_order_id=NULL,approval_url=NULL
@@ -106,7 +106,7 @@ export async function startCheckout(service:Marketplace,user:User,id:string){
   return {approvalUrl:saved.approval_url};
 }
 
-async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant:string,origin:string){
+async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,merchant:string){
   const unit=order.purchase_units?.[0];
   const capture=unit?.payments?.captures?.[0];
   if(order.id!==checkout.paypal_order_id||order.status!=='COMPLETED'||
@@ -119,20 +119,25 @@ async function applyCapture(service:Marketplace,checkout:Checkout,order:Order,me
   await service.db.write(async db=>{
     const current=await payment(db,checkout.listing_id);
     if(current?.capture_id!==capture.id){
-      const listing=await db.get<{data:string;package_id:string}>('SELECT data,package_id FROM listings WHERE id=?',checkout.listing_id);
-      const pack=listingPackages.find(item=>item.id===listing?.package_id);
-      if(!listing||!pack||current?.capture_id||current?.paypal_order_id!==checkout.paypal_order_id)throw new ApiError(409,'This payment needs reconciliation.');
+      const listing=await db.get<{data:string;package_id:string;owner_id:string}>('SELECT data,package_id,owner_id FROM listings WHERE id=?',checkout.listing_id);
+      if(!listing||!listingPackages.some(item=>item.id===listing.package_id)||current?.capture_id||current?.paypal_order_id!==checkout.paypal_order_id)throw new ApiError(409,'This payment needs reconciliation.');
       const now=Date.now();
       const held=await db.get('SELECT 1 FROM listing_payment_incidents WHERE capture_id=?',capture.id);
-      const updated=await db.run(`UPDATE listings SET state=?,expires_at=?,updated_at=?
-        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`,held?'withdrawn':'published',held?null:now+pack.durationDays*86400000,now,checkout.listing_id,checkout.amount_pence);
+      const updated=await db.run(`UPDATE listings SET state=?,expires_at=NULL,updated_at=?
+        WHERE id=? AND state='awaiting_payment' AND fee_pence=?`,held?'withdrawn':'pending_review',now,checkout.listing_id,checkout.amount_pence);
       if(updated!==1)throw new ApiError(409,'This payment needs reconciliation.');
       await db.run('UPDATE listing_payments SET capture_id=? WHERE listing_id=?',capture.id,checkout.listing_id);
       if(held)return;
       const machine=JSON.parse(listing.data) as Machine;
       const name=(machine.make+' '+machine.model).replace(/\s+/g,' ');
-      const url=new URL('/equipment/'+encodeURIComponent(checkout.listing_id),origin).href;
-      await db.run('INSERT INTO listing_publication_emails(listing_id,subject,body) VALUES(?,?,?)',checkout.listing_id,'New listing live: '+name,`A new listing is live on Buy & Sell Lasers.\n\n${name} (${machine.year})\n${url}`);
+      const seller=await db.get<{email:string}>('SELECT email FROM users WHERE id=?',listing.owner_id);
+      if(!seller)throw new ApiError(409,'Seller account not found.');
+      const subject='Approval needed: paid listing for '+name;
+      const body=`A seller has paid for a listing. Review it in the operator portal before it goes live.\n\n${name} (${machine.year})\nSeller: ${seller.email}\nListing ID: ${checkout.listing_id}\n\n${process.env.APP_ORIGIN??'https://buy-and-sell-lasers-new-website.vercel.app'}/portal#new-site`;
+      for(const recipient of ['info@buyandselllasers.com','az@wiwy.com']){
+        await db.run('INSERT INTO listing_notifications(listing_id,kind,recipient,subject,body) VALUES(?,?,?,?,?)',
+          checkout.listing_id,'approval_request',recipient,subject,body);
+      }
     }
   });
 }
@@ -152,7 +157,7 @@ async function captureOrder(service:Marketplace,checkout:Checkout,api:Awaited<Re
     await api.call(path+'/capture',{},'capture-'+checkout.request_id);
     order=await api.call<Order>(path);
   }
-  await applyCapture(service,checkout,order,api.merchant,api.origin);
+  await applyCapture(service,checkout,order,api.merchant);
 }
 
 export async function captureCheckout(service:Marketplace,user:User,id:string,orderId:unknown){
@@ -190,7 +195,7 @@ async function holdAffectedListings(service:Marketplace,eventId:string,eventType
     for(const captureId of captureIds){
       await db.run(`INSERT INTO listing_payment_incidents VALUES(?,?,?,?) ON CONFLICT(event_id,capture_id) DO NOTHING`,
         eventId,captureId,eventType,now);
-      await db.run(`UPDATE listings SET state='withdrawn',updated_at=? WHERE state='published'
+      await db.run(`UPDATE listings SET state='withdrawn',updated_at=? WHERE state IN ('published','pending_review')
         AND id=(SELECT listing_id FROM listing_payments WHERE capture_id=?)`,now,captureId);
     }
   });
@@ -228,7 +233,7 @@ export async function paypalWebhook(service:Marketplace,headers:Headers,event:Re
   if(approved){
     await captureOrder(service,checkout,api);
   }else if(!checkout.capture_id){
-    await applyCapture(service,checkout,await api.call<Order>(orderPath(orderId)),api.merchant,api.origin);
+    await applyCapture(service,checkout,await api.call<Order>(orderPath(orderId)),api.merchant);
   }
   return checkout.listing_id;
 }

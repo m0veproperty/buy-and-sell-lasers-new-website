@@ -23,6 +23,7 @@ export default async function EquipmentPage({params}:{params:Promise<{id:string}
       <div className="account-photo-grid">{photos.map((photo,index)=><a key={photo} href={'/api/marketplace/photos/'+photo}>
         <img src={'/api/marketplace/photos/'+photo} alt={`Equipment photo ${index+1}`} width={360} height={260}/>
       </a>)}</div>
+      {data.description&&<p className="product-lead">{data.description}</p>}
       <dl><dt>Condition</dt><dd>{data.condition}</dd>
         {data.accessories&&<><dt>Accessories</dt><dd>{data.accessories}</dd></>}
         {data.history&&<><dt>Service and ownership history</dt><dd>{data.history}</dd></>}

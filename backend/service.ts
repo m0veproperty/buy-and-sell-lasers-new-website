@@ -1,12 +1,12 @@
 import {randomBytes,randomUUID,createHash,scrypt as scryptCallback,timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import type {Queries,Store} from './store.ts';
-import {packageForPrice,quoteListingFee} from '../lib/listing-packages.ts';
+import {listingPackages,packageForPrice,quoteListingFee} from '../lib/listing-packages.ts';
 
 const scrypt=promisify(scryptCallback);
 export class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
 export type User={id:string;email:string;name:string};
-export type Machine={make:string;model:string;year:string;askingPrice:string;location:string;category:string;condition:string;accessories:string;history:string};
+export type Machine={make:string;model:string;year:string;askingPrice:string;location:string;category:string;condition:string;accessories:string;history:string;description:string};
 type Row={id:string;owner_id:string;data:string;state:string;package_id:string|null;fee_pence:number|null;expires_at:number|null;created_at:number;updated_at:number};
 export const machineCategories=['Laser hair removal','Laser tattoo removal','IPL machines','All-in-one machines','Skin treatment','Slimming machines'];
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -17,7 +17,7 @@ export function text(value:unknown,label:string,max=2000,min=1) {
 export function email(value:unknown) {const s=text(value,'Email',254).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))throw new ApiError(400,'Enter a valid email address.');return s;}
 export function validateMachine(input:Record<string,unknown>):Machine {
   const result={} as Machine;
-  for(const k of ['make','model','year','askingPrice','location','category','condition','accessories','history'] as const)result[k]=text(input[k]??'',k,k==='condition'||k==='history'||k==='accessories'?2000:120,['accessories','history'].includes(k)?0:1);
+  for(const k of ['make','model','year','askingPrice','location','category','condition','accessories','history','description'] as const)result[k]=text(input[k]??'',k,k==='condition'||k==='history'||k==='accessories'||k==='description'?2000:120,['accessories','history','description'].includes(k)?0:1);
   if(!machineCategories.includes(result.category))throw new ApiError(400,'Choose an equipment category.');
   if(!/^\d{4}$/.test(result.year)||Number(result.year)<1900||Number(result.year)>new Date().getFullYear())throw new ApiError(400,'Enter a valid model year.');
   if(!/^\d{1,8}(\.\d{1,2})?$/.test(result.askingPrice)||Number(result.askingPrice)<=0)throw new ApiError(400,'Enter a positive price with at most two decimal places.');
@@ -96,7 +96,7 @@ export class Marketplace {
         AND lower(json_extract(other.data,'$.location'))=lower(json_extract(l.data,'$.location'))) AS similar
       FROM listings l JOIN users u ON u.id=l.owner_id
       JOIN listing_payments p ON p.listing_id=l.id
-      WHERE p.capture_id IS NOT NULL AND ((l.state='published' AND l.expires_at>?)
+      WHERE p.capture_id IS NOT NULL AND (l.state='pending_review' OR (l.state='published' AND l.expires_at>?)
         OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_payment_incidents i WHERE i.capture_id=p.capture_id)))
       ORDER BY l.updated_at DESC LIMIT 100`,Date.now(),Date.now());
     return Promise.all(rows.map(async row=>{
@@ -106,6 +106,54 @@ export class Marketplace {
       if(!listing.data.history)flags.push('The seller did not provide service or ownership history.');
       return {...listing,sellerEmail:row.seller_email,sellerName:row.seller_name,expiresAt:row.expires_at,flags,paymentIncidents:JSON.parse(row.payment_incidents) as string[]};
     }));
+  }
+
+  async notificationsForOperators(user:User){
+    await this.requireOperator(user);
+    return this.db.all<{listing_id:string;kind:string;recipient:string;subject:string;body:string;sent_at:number|null}>(
+      'SELECT listing_id,kind,recipient,subject,body,sent_at FROM listing_notifications ORDER BY rowid DESC LIMIT 100');
+  }
+
+  async reviewCandidate(user:User,id:string){
+    await this.requireOperator(user);
+    const row=await this.db.get<Row>(`SELECT l.* FROM listings l JOIN listing_payments p ON p.listing_id=l.id
+      WHERE l.id=? AND l.state='pending_review' AND p.capture_id IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM listing_payment_incidents i WHERE i.capture_id=p.capture_id)`,id);
+    if(!row)throw new ApiError(409,'This listing is not awaiting approval.');
+    const pending=await this.db.get<{count:number}>(`SELECT count(*) AS count FROM listing_notifications
+      WHERE listing_id=? AND kind='approval_request' AND sent_at IS NULL`,id);
+    if(pending?.count)throw new ApiError(409,'The administrator email is still awaiting delivery.');
+    return JSON.parse(row.data) as Machine;
+  }
+
+  async approve(user:User,id:string,description:string){
+    await this.requireOperator(user);
+    return this.db.write(async db=>{
+      const row=await db.get<Row>(`SELECT l.* FROM listings l JOIN listing_payments p ON p.listing_id=l.id
+        WHERE l.id=? AND l.state='pending_review' AND p.capture_id IS NOT NULL
+        AND NOT EXISTS(SELECT 1 FROM listing_payment_incidents i WHERE i.capture_id=p.capture_id)`,id);
+      if(!row)throw new ApiError(409,'This listing is not awaiting approval.');
+      const pending=await db.get<{count:number}>(`SELECT count(*) AS count FROM listing_notifications
+        WHERE listing_id=? AND kind='approval_request' AND sent_at IS NULL`,id);
+      if(pending?.count)throw new ApiError(409,'The administrator email is still awaiting delivery.');
+      const pack=listingPackages.find(item=>item.id===row.package_id);
+      if(!pack)throw new ApiError(409,'This listing package needs reconciliation.');
+      const original=JSON.parse(row.data) as Machine;
+      const data={...original,description:text(description,'Description',2000,0)};
+      const now=Date.now();
+      const origin=process.env.APP_ORIGIN;
+      if(!origin)throw new ApiError(503,'The listing URL is not configured.');
+      const url=new URL('/equipment/'+encodeURIComponent(id),origin).href;
+      const seller=await db.get<{email:string}>('SELECT email FROM users WHERE id=?',row.owner_id);
+      if(!seller)throw new ApiError(409,'Seller account not found.');
+      await db.run(`INSERT INTO listing_approvals VALUES(?,?,?,?)`,id,user.id,original.description??'',now);
+      await db.run(`UPDATE listings SET state='published',data=?,expires_at=?,updated_at=?
+        WHERE id=? AND state='pending_review'`,JSON.stringify(data),now+pack.durationDays*86400000,now,id);
+      await db.run(`INSERT INTO listing_notifications(listing_id,kind,recipient,subject,body) VALUES(?,?,?,?,?)`,
+        id,'listing_live',seller.email,'Your listing is live: '+data.make+' '+data.model,
+        `Your listing is now live on Buy & Sell Lasers.\n\nView your machine: ${url}\n\nThank you for listing with us.`);
+      return this.present(await this.row(id,db),db);
+    });
   }
 
   private async row(id:string,db:Queries=this.db){
@@ -204,9 +252,10 @@ export class Marketplace {
   async photo(photoId:string,user?:User,operatorAccess=false){
     const p=await this.db.get<{bytes:ArrayBuffer}>(`SELECT p.bytes FROM photos p JOIN listings l ON l.id=p.listing_id
       WHERE p.id=? AND (l.owner_id=? OR (l.state='published' AND l.expires_at>?)
+      OR (l.state='pending_review' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?))
       OR (l.state='withdrawn' AND EXISTS(SELECT 1 FROM listing_operators WHERE user_id=?)
         AND EXISTS(SELECT 1 FROM listing_payments lp JOIN listing_payment_incidents i
-          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,operatorAccess?null:user?.id??null,Date.now(),operatorAccess?user?.id??null:null);
+          ON i.capture_id=lp.capture_id WHERE lp.listing_id=l.id)))`,photoId,operatorAccess?null:user?.id??null,Date.now(),operatorAccess?user?.id??null:null,operatorAccess?user?.id??null:null);
     if(!p)throw new ApiError(404,'Photograph not found.');
     return new Uint8Array(p.bytes);
   }

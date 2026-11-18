@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
-import {sendPublicationEmail,retryPublicationEmails} from '@/backend/publication-email';
+import {sendListingNotifications,retryListingNotifications} from '@/backend/publication-email';
+import {enhanceListingDescription} from '@/backend/listing-copy';
 import {labelWordPressMachine,wordpressInventory} from '@/backend/operator-inventory';
 import {lockPortal,portalSessionSeconds,requirePortalPin,unlockPortal} from '@/backend/portal-pin';
 import {homeMachines} from '@/backend/home-machines';
@@ -31,17 +32,19 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
     if(method==='POST'&&key==='paypal/webhook'){
       const service=new Marketplace(await getStore());
       const listingId=await paypalWebhook(service,req.headers,await json(req));
-      if(listingId)await sendPublicationEmail(service,listingId);
+      if(listingId)await sendListingNotifications(service,listingId).catch(()=>{
+         console.error('Admin listing email remains queued.');
+       });
       return response({ok:true});
     }
-    if(method==='POST'&&key==='notifications/retry'){
-      const secret=process.env.MARKETPLACE_NOTIFICATION_SECRET;
+    if((method==='POST'||method==='GET')&&key==='notifications/retry'){
+      const secret=method==='GET'?process.env.CRON_SECRET:process.env.MARKETPLACE_NOTIFICATION_SECRET;
       const actual=Buffer.from(req.headers.get('authorization')??'');
       const expected=Buffer.from('Bearer '+secret);
       if(!secret||actual.length!==expected.length||!timingSafeEqual(actual,expected)){
         throw new ApiError(401,'Notification retry is not authorized.');
       }
-      return response(await retryPublicationEmails(new Marketplace(await getStore())));
+      return response(await retryListingNotifications(new Marketplace(await getStore())));
     }
     if(method!=='GET'){
       const requestOrigin=new URL(req.url);
@@ -67,7 +70,17 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
         return res;
       }
       const actor=await requirePortalPin(service,portalToken);
-      if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(actor),wordpress:await wordpressInventory(service)});
+      if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(actor),wordpress:await wordpressInventory(service),notifications:await service.notificationsForOperators(actor)});
+       if(method==='POST'&&path.length===3&&path[1]==='approve'){
+         await service.rate('portal-approve:'+actor.id,20);
+         const candidate=await service.reviewCandidate(actor,path[2]);
+         const description=await enhanceListingDescription(candidate);
+         const listing=await service.approve(actor,path[2],description);
+         await sendListingNotifications(service,path[2]).catch(()=>{
+           console.error('Seller listing email remains queued.');
+         });
+         return response({listing});
+       }
       if(method==='PATCH'&&path.length===3&&path[1]==='wordpress'){
         await service.rate('portal-write:'+actor.id,100);
         return response(await labelWordPressMachine(service,actor,path[2],await json(req)));
@@ -99,14 +112,14 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
       const id=path[1];
       if(method==='POST'&&path[2]==='checkout'&&path.length===3){
         const checkout=await startCheckout(service,user,id);
-        if(checkout.published)await sendPublicationEmail(service,id).catch(()=>{
+        if(checkout.paid)await sendListingNotifications(service,id).catch(()=>{
           console.error('Publication email remains queued.');
         });
         return response(checkout);
       }
       if(method==='POST'&&path[2]==='capture'&&path.length===3){
         const listingId=await captureCheckout(service,user,id,(await json(req)).orderId);
-        await sendPublicationEmail(service,listingId).catch(error=>{
+        await sendListingNotifications(service,listingId).catch(error=>{
           console.error('Publication email remains queued:',error instanceof Error?error.message:'Unknown error');
         });
         return response({ok:true});
