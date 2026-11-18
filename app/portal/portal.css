@@ -16,7 +16,8 @@
 .portal-brand small { display: block; color: #acbfd5; font-weight: 400; }
 .portal-sidebar nav { display: grid; gap: 8px; }
 .portal-sidebar a { color: inherit; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 7px; }
-.portal-sidebar nav a:first-child, .portal-sidebar a:hover { background: #263a50; }
+.portal-sidebar nav a[aria-current="page"], .portal-sidebar a:hover { background: #263a50; }
+.portal-nav-label { color: #94aec5; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; padding: 12px 10px 2px; }
 .portal-public { margin-top: auto; }
 .portal-main { min-width: 0; max-width: 1640px; width: 100%; padding: clamp(20px,4vw,52px); margin: 0 auto; }
 .portal h1, .portal h2, .portal h3 { color: inherit; margin: 0; letter-spacing: -.025em; }
@@ -71,3 +72,17 @@
 .portal-email summary { line-height: 1.5; }
 .portal-email pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 12px; background: #f3f6fa; border-radius: 7px; }
 .portal-new-row > div:last-child { min-width: 0; }
+.portal-content-filters { display: grid; grid-template-columns: minmax(200px,1fr) minmax(160px,240px); gap: 12px; margin: 18px 0; }
+.portal-content-filters label > span { display: flex; align-items: center; gap: 7px; border: 1px solid var(--portal-line); padding-left: 9px; border-radius: 7px; }
+.portal-content-filters input { border: 0; }
+.portal-content-list { border-top: 1px solid var(--portal-line); }
+.portal-content-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 2px; border-bottom: 1px solid var(--portal-line); }
+.portal-content-row > div { min-width: 0; }
+.portal-content-row small { display: block; overflow-wrap: anywhere; }
+.portal-content-row a { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.portal-content-group { display: inline-block; margin-bottom: 3px; color: #52647a; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+@media(max-width: 600px) {
+  .portal-content-filters { grid-template-columns: 1fr; }
+  .portal-content-row { align-items: flex-start; }
+  .portal-content-row a { white-space: nowrap; }
+}

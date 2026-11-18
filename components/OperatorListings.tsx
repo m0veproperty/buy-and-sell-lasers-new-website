@@ -1,12 +1,14 @@
 'use client';
 
 import {useEffect,useState,type FormEvent} from 'react';
-import {Boxes, ExternalLink, LayoutGrid, ShieldCheck} from 'lucide-react';
+import {Boxes, ExternalLink, FileText, LayoutGrid, Mail, Newspaper, ShieldCheck} from 'lucide-react';
 import WordPressInventory from './WordPressInventory';
 import PortalThumbnail from './PortalThumbnail';
+import SiteContent from './SiteContent';
 import {listingPackages} from '@/lib/listing-packages';
 import type {WordPressMachine} from '@/backend/operator-inventory';
 import type {Machine} from '@/backend/service';
+import type {SiteContent as Content} from '@/backend/site-content';
 
 type OperatorListing = {
   id:string;
@@ -22,9 +24,19 @@ type OperatorListing = {
 };
 type Inventory = {capturedAt:string;machines:WordPressMachine[]};
 type Notification = {listing_id:string;kind:'approval_request'|'listing_live';recipient:string;subject:string;body:string;sent_at:number|null};
+type View='inventory'|'new-site'|'emails'|'pages'|'posts';
+const views:View[]=['inventory','new-site','emails','pages','posts'];
+const headings:Record<View,{title:string;description:string}>={
+  inventory:{title:'Machine inventory',description:'Review the WordPress machine snapshot and listing details.'},
+  'new-site':{title:'New-site listings',description:'Review paid listings awaiting approval and listings already live.'},
+  emails:{title:'Automated emails',description:'View messages prepared and sent for paid listings.'},
+  pages:{title:'Website pages',description:'Browse the pages and live listings published on this website.'},
+  posts:{title:'Posts',description:'Browse the published guides and articles.'},
+};
 
 export default function OperatorListings(){
-  const [result,setResult]=useState<{listings:OperatorListing[];wordpress:Inventory|null;notifications:Notification[]}|null>(null);
+  const [result,setResult]=useState<{listings:OperatorListing[];wordpress:Inventory|null;notifications:Notification[];content:Content}|null>(null);
+  const [view,setView]=useState<View>('inventory');
   const [error,setError]=useState('');
   const [needsPin,setNeedsPin]=useState(false);
   const [locked,setLocked]=useState(false);
@@ -44,6 +56,16 @@ export default function OperatorListings(){
     const controller=new AbortController();
     void load(controller.signal).catch(error=>{if(!controller.signal.aborted)setError(error.message);});
     return ()=>controller.abort();
+  },[]);
+
+  useEffect(()=>{
+    const syncView=()=>{
+      const hash=window.location.hash.slice(1);
+      setView(views.includes(hash as View)?hash as View:'inventory');
+    };
+    syncView();
+    window.addEventListener('hashchange',syncView);
+    return ()=>window.removeEventListener('hashchange',syncView);
   },[]);
 
   async function unlock(event:FormEvent<HTMLFormElement>){
@@ -96,15 +118,19 @@ export default function OperatorListings(){
     <aside className="portal-sidebar">
       <div className="portal-brand"><span><Boxes size={21}/></span><div>Buy &amp; Sell Lasers<small>Administration</small></div></div>
       <nav aria-label="Portal navigation">
-        <a href="#inventory"><LayoutGrid size={17}/> Machine inventory</a>
-        <a href="#new-site"><ShieldCheck size={17}/> New-site listings</a>
-        <a href="#emails">Automated emails</a>
+        <span className="portal-nav-label">Listings</span>
+        <a href="#inventory" aria-current={view==='inventory'?'page':undefined}><LayoutGrid size={17}/> Machine inventory</a>
+        <a href="#new-site" aria-current={view==='new-site'?'page':undefined}><ShieldCheck size={17}/> New-site listings</a>
+        <a href="#emails" aria-current={view==='emails'?'page':undefined}><Mail size={17}/> Automated emails</a>
+        <span className="portal-nav-label">Website</span>
+        <a href="#pages" aria-current={view==='pages'?'page':undefined}><FileText size={17}/> Pages</a>
+        <a href="#posts" aria-current={view==='posts'?'page':undefined}><Newspaper size={17}/> Posts</a>
       </nav>
       {result&&<button className="portal-lock" onClick={lock}>Lock portal</button>}
       <a className="portal-public" href="/">View public site <ExternalLink size={15}/></a>
     </aside>
-    <main id="inventory" className="portal-main">
-      <header className="portal-heading"><h1>Machine inventory</h1><p>Review listing provenance, seller details and publication dates.</p></header>
+    <main id={view} className="portal-main">
+      <header className="portal-heading"><h1>{headings[view].title}</h1><p>{headings[view].description}</p></header>
       {error&&<div className="portal-panel" role="alert">{error}</div>}
       {needsPin&&!locked&&<section className="portal-panel portal-pin">
         <h2>Unlock the portal</h2>
@@ -114,10 +140,10 @@ export default function OperatorListings(){
           <button disabled={busy}>Unlock</button>
         </form>
       </section>}
-      {!result&&!error&&!needsPin&&!locked&&<p role="status">Loading inventory…</p>}
+      {!result&&!error&&!needsPin&&!locked&&<p role="status">Loading portal…</p>}
       {result&&<>
-        <WordPressInventory inventory={result.wordpress}/>
-        <section id="new-site" className="portal-panel">
+        {view==='inventory'&&<WordPressInventory inventory={result.wordpress}/>}
+        {view==='new-site'&&<section className="portal-panel">
           <h2>New-site listings</h2>
           {result.listings.length===0&&<p>No listings are live or on payment hold.</p>}
           {result.listings.map(listing=>{
@@ -133,8 +159,8 @@ export default function OperatorListings(){
               {listing.state==='published'&&<a href={'/equipment/'+listing.id}>View live listing</a>}</div>
             </article>;
           })}
-        </section>
-        <section id="emails" className="portal-panel">
+        </section>}
+        {view==='emails'&&<section className="portal-panel">
           <h2>Automated emails</h2>
           <p>Read-only record of the messages prepared for paid listings. Administrators receive an approval request first; the seller receives their product link after approval and publication.</p>
           {!result.notifications.length&&<p>No listing emails have been queued yet.</p>}
@@ -142,7 +168,8 @@ export default function OperatorListings(){
             <summary><strong>{mail.kind==='approval_request'?'Administrator approval request':'Seller listing live'}</strong> · {mail.recipient} · {mail.sent_at?'Sent '+new Date(mail.sent_at).toLocaleString('en-GB',{timeZone:'Europe/London'}):'Queued'}</summary>
             <p><strong>Subject:</strong> {mail.subject}</p><pre>{mail.body}</pre>
           </details>)}
-        </section>
+        </section>}
+        {(view==='pages'||view==='posts')&&<SiteContent content={result.content} view={view}/>}
       </>}
     </main>
   </div>;

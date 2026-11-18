@@ -5,6 +5,7 @@ import {enhanceListingDescription} from '@/backend/listing-copy';
 import {labelWordPressMachine,wordpressInventory} from '@/backend/operator-inventory';
 import {lockPortal,portalSessionSeconds,requirePortalPin,unlockPortal} from '@/backend/portal-pin';
 import {homeMachines} from '@/backend/home-machines';
+import {siteContent} from '@/backend/site-content';
 import sharp from 'sharp';
 import {getStore} from '@/backend/store';
 import {startCheckout,captureCheckout,paypalWebhook} from '@/backend/paypal';
@@ -70,7 +71,7 @@ async function handle(req:NextRequest,ctx:{params:Promise<{path:string[]}>}){
         return res;
       }
       const actor=await requirePortalPin(service,portalToken);
-      if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(actor),wordpress:await wordpressInventory(service),notifications:await service.notificationsForOperators(actor)});
+      if(method==='GET'&&key==='operator/listings')return response({listings:await service.listingsForOperators(actor),wordpress:await wordpressInventory(service),notifications:await service.notificationsForOperators(actor),content:await siteContent(service)});
        if(method==='POST'&&path.length===3&&path[1]==='approve'){
          await service.rate('portal-approve:'+actor.id,20);
          const candidate=await service.reviewCandidate(actor,path[2]);
