@@ -118,13 +118,13 @@ test('the driver preserves existing SQLite data across connections',async t=>{
   }finally{reopened.close();}
 });
 
-test('verified PayPal capture publishes once and queues an email to both recipients',async t=>{
+test('verified PayPal capture waits for admin approval and sends the seller a live link once',async t=>{
   const {startCheckout,paypalWebhook,captureCheckout}=await import('../backend/paypal.ts');
-  const {sendPublicationEmail}=await import('../backend/publication-email.ts');
+  const {sendListingNotifications}=await import('../backend/publication-email.ts');
   const {db,service:s}=await setup();
   t.after(()=>db.close());
   const [seller,operator]=await users(s);
-  const listing=await s.save(seller.user,machine);
+  const listing=await s.save(seller.user,{...machine,description:'Seller supplied description.'});
   const photo=await s.addPhoto(seller.user,listing.id,new Uint8Array([1]));
   await s.submit(seller.user,listing.id);
   await db.run('INSERT INTO listing_operators VALUES(?)',operator.user.id);
@@ -138,17 +138,17 @@ test('verified PayPal capture publishes once and queues an email to both recipie
     t.after(()=>{if(previous===undefined)delete process.env[key];else process.env[key]=previous;});
   }
 
-  let verified=false,captured=false,captures=0,charge='120.00',emailAttempts=0,voided=false,created=0;
+  let verified=false,captured=false,captures=0,charge='120.00',voided=false,created=0;
+  const delivered=[];
   t.mock.method(globalThis,'fetch',async (url,init)=>{
     const path=new URL(url).pathname;
     const amount={currency_code:'GBP',value:charge};
     if(url==='https://api.resend.com/emails'){
-      emailAttempts++;
-      assert.deepEqual(JSON.parse(init.body).to,['info@buyandselllasers.com','az@wiwy.com']);
-      assert.match(JSON.parse(init.body).text,new RegExp('test.example/equipment/'+listing.id));
-      assert.equal(init.headers['Idempotency-Key'],'marketplace-listing-published/'+listing.id);
-      if(emailAttempts===1)return Response.json({}, {status:503});
-      return Response.json({id:'email'});
+      const email=JSON.parse(init.body);
+      delivered.push(email);
+      assert.equal(email.to.length,1);
+      if(delivered.length===1)return Response.json({}, {status:503});
+      return Response.json({id:'email-'+delivered.length});
     }
     if(path==='/v1/oauth2/token')return Response.json({access_token:'test-token'});
     if(path==='/v1/notifications/verify-webhook-signature'){
@@ -191,28 +191,36 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   await assert.rejects(paypalWebhook(s,headers,event),status(409));
   assert.equal(captures,0);
   charge='120.00';
-  await db.run(`CREATE TRIGGER fail_publication_email BEFORE INSERT ON listing_publication_emails
+  await db.run(`CREATE TRIGGER fail_notification BEFORE INSERT ON listing_notifications
     BEGIN SELECT RAISE(ABORT,'test rollback'); END`);
   await assert.rejects(paypalWebhook(s,headers,event),/test rollback/);
   assert.equal((await s.mine(seller.user))[0].state,'awaiting_payment');
   assert.equal((await db.get('SELECT capture_id FROM listing_payments')).capture_id,null);
-  await db.run('DROP TRIGGER fail_publication_email');
+  await db.run('DROP TRIGGER fail_notification');
   await paypalWebhook(s,headers,event);
   await paypalWebhook(s,headers,event);
   await captureCheckout(s,seller.user,listing.id,'order');
   assert.equal(captures,1);
-  assert.equal((await s.mine(seller.user))[0].state,'published');
+  assert.equal((await s.mine(seller.user))[0].state,'pending_review');
+  assert.equal(await s.publishedListing(listing.id),undefined);
+  assert.equal((await db.get('SELECT count(*) AS count FROM listing_notifications')).count,2);
   assert.deepEqual((await s.listingsForOperators(operator.user))[0].flags,['The seller did not provide service or ownership history.']);
-  assert.deepEqual((await s.photo(photo)),new Uint8Array([1]));
-  assert.equal((await s.publishedListing(listing.id)).state,'published');
-  assert.equal((await db.get('SELECT count(*) AS count FROM listing_publication_emails')).count,1);
-  await assert.rejects(sendPublicationEmail(s,listing.id),status(503));
-  assert.equal((await db.get('SELECT sent_at FROM listing_publication_emails')).sent_at,null);
-  assert.equal((await s.publishedListing(listing.id)).state,'published');
-  await sendPublicationEmail(s,listing.id);
-  await sendPublicationEmail(s,listing.id);
-  assert.equal(emailAttempts,2);
-  assert.equal((await db.get('SELECT provider_id FROM listing_publication_emails')).provider_id,'email');
+  await assert.rejects(s.photo(photo),status(404));
+  assert.deepEqual(await s.photo(photo,operator.user,true),new Uint8Array([1]));
+  await assert.rejects(s.approve(operator.user,listing.id,'Enhanced description.'),status(409));
+  await assert.rejects(sendListingNotifications(s,listing.id),status(503));
+  assert.equal((await db.get('SELECT count(*) AS count FROM listing_notifications WHERE sent_at IS NULL')).count,2);
+  await sendListingNotifications(s,listing.id);
+  assert.deepEqual(delivered.slice(1).map(item=>item.to[0]),['az@wiwy.com','info@buyandselllasers.com']);
+  assert.ok(delivered[1].text.includes('/portal#new-site'));
+  await s.approve(operator.user,listing.id,'Enhanced description.');
+  assert.equal((await s.publishedListing(listing.id)).data.description,'Enhanced description.');
+  assert.equal((await db.get('SELECT count(*) AS count FROM listing_notifications')).count,3);
+  await sendListingNotifications(s,listing.id);
+  await sendListingNotifications(s,listing.id);
+  assert.equal(delivered.length,4);
+  assert.deepEqual(delivered[3].to,['seller@example.test']);
+  assert.ok(delivered[3].text.includes('https://test.example/equipment/'+listing.id));
   const refund={id:'refund-event',event_type:'PAYMENT.CAPTURE.REFUNDED',
     resource:{links:[{rel:'up',href:'https://api-m.sandbox.paypal.com/v2/payments/captures/capture'}]}};
   verified=false;
@@ -228,6 +236,21 @@ test('verified PayPal capture publishes once and queues an email to both recipie
   assert.deepEqual(held.paymentIncidents,['PAYMENT.CAPTURE.REFUNDED']);
   await assert.rejects(s.photo(photo),status(404));
   assert.deepEqual(await s.photo(photo,operator.user,true),new Uint8Array([1]));
+});
+
+test('listing copy uses seller facts and rejects an unavailable AI response',async t=>{
+  const {enhanceListingDescription}=await import('../backend/listing-copy.ts');
+  const previous=process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY='test';
+  t.after(()=>{if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;});
+  t.mock.method(globalThis,'fetch',async (url,init)=>{
+    assert.equal(url,'https://api.openai.com/v1/responses');
+    const request=JSON.parse(init.body);
+    assert.equal(request.store,false);
+    assert.equal(JSON.parse(request.input).condition,machine.condition);
+    return Response.json({output:[{type:'message',content:[{type:'output_text',text:'Clear seller-grounded copy.'}]}]});
+  });
+  assert.equal(await enhanceListingDescription({...machine,description:'Seller description.'}),'Clear seller-grounded copy.');
 });
 
 test('only operators can classify WordPress inventory and labels persist',async t=>{

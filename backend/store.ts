@@ -46,6 +46,23 @@ const schema=`
       PRIMARY KEY(event_id,capture_id)
     );
     CREATE INDEX IF NOT EXISTS listing_payment_incident_capture ON listing_payment_incidents(capture_id);
+    CREATE TABLE IF NOT EXISTS listing_approvals(
+      listing_id TEXT PRIMARY KEY REFERENCES listings(id),
+      operator_id TEXT NOT NULL REFERENCES users(id),
+      seller_description TEXT NOT NULL,
+      approved_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS listing_notifications(
+      listing_id TEXT NOT NULL REFERENCES listings(id),
+      kind TEXT NOT NULL CHECK(kind IN ('approval_request','listing_live')),
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      sent_at INTEGER,
+      provider_id TEXT,
+      PRIMARY KEY(listing_id,kind,recipient)
+    );
+    CREATE INDEX IF NOT EXISTS listing_notifications_pending ON listing_notifications(sent_at,kind);
     CREATE TABLE IF NOT EXISTS listing_publication_emails(
       listing_id TEXT PRIMARY KEY REFERENCES listings(id),
       subject TEXT NOT NULL,
