@@ -1,8 +1,9 @@
 import {notFound} from 'next/navigation';
 import {Marketplace} from '@/backend/service';
 import {getStore} from '@/backend/store';
-import SiteShell,{PageIntro} from '@/components/SiteShell';
-import EquipmentEnquiry from '@/components/EquipmentEnquiry';
+import SiteShell from '@/components/SiteShell';
+import ListingDetail from '@/components/ListingDetail';
+import {sellerCategoryNames} from '@/lib/equipment-taxonomy';
 
 export const dynamic='force-dynamic';
 
@@ -16,19 +17,6 @@ export default async function EquipmentPage({params}:{params:Promise<{id:string}
   if(!listing)notFound();
   const {data,photos}=listing;
   return <SiteShell>
-    <PageIntro label={data.category} title={data.make+' '+data.model} description={data.year+' · '+data.location}/>
-    <section className="account-page page-width">
-      <p className="eyebrow">Asking price</p>
-      <h2>{new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(Number(data.askingPrice))}</h2>
-      <div className="account-photo-grid">{photos.map((photo,index)=><a key={photo} href={'/api/marketplace/photos/'+photo}>
-        <img src={'/api/marketplace/photos/'+photo} alt={`Equipment photo ${index+1}`} width={360} height={260}/>
-      </a>)}</div>
-      {data.description&&<p className="product-lead">{data.description}</p>}
-      <dl><dt>Condition</dt><dd>{data.condition}</dd>
-        {data.accessories&&<><dt>Accessories</dt><dd>{data.accessories}</dd></>}
-        {data.history&&<><dt>Service and ownership history</dt><dd>{data.history}</dd></>}
-      </dl>
-      <EquipmentEnquiry listingId={id}/>
-    </section>
+    <ListingDetail item={{id,brand:data.make,model:data.model,year:data.year,category:sellerCategoryNames[data.category]??'Other equipment',price:Number(data.askingPrice),location:data.location,photos:photos.map(photo=>'/api/marketplace/photos/'+photo),description:data.description||`${data.make} ${data.model} offered by a marketplace seller.`,conditionGrade:data.conditionGrade||'Not stated',conditionNotes:data.condition,history:data.history||'Service and ownership history has not been provided.',accessories:data.accessories||'Ask the seller to confirm the included accessories.',nativeId:id}}/>
   </SiteShell>;
 }

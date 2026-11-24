@@ -6,7 +6,7 @@ import {categories,listings,money,type Listing} from '@/lib/listings';
 import type {HomeMachine} from '@/lib/home-machines';
 import './equipment-browser.css';
 
-const icons=[Grid2X2,Waves,Target,Sparkles,Layers,Zap,Waves];
+const icons=[Grid2X2,Waves,Target,Sparkles,Layers,Zap,Waves,Grid2X2];
 
 function MachineRail({title,machines,featured,onSelect}:{title:string;machines:HomeMachine[];featured:boolean;onSelect:(item:Listing)=>void}){
   const rail=useRef<HTMLDivElement>(null);

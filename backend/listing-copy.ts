@@ -10,10 +10,10 @@ export async function enhanceListingDescription(machine:Machine){
       model:process.env.MARKETPLACE_OPENAI_MODEL||'gpt-4.1-mini',
       store:false,
       max_output_tokens:320,
-      instructions:'Write a concise UK English equipment listing description using only the seller-supplied facts. Preserve all stated faults and uncertainty. Do not invent specifications, usage, service history, accessories, condition, or claims of safety. No headings, prices, contact details, or markdown. Return only the description.',
+      instructions:'Write a concise UK English equipment listing description using only the seller-supplied facts. Preserve all stated faults and uncertainty. Treat the condition grade as seller stated, not verified. Do not invent specifications, usage, service history, accessories, condition, or claims of safety. No headings, prices, contact details, or markdown. Return only the description.',
       input:JSON.stringify({
         make:machine.make,model:machine.model,year:machine.year,category:machine.category,
-        condition:machine.condition,accessories:machine.accessories,history:machine.history,
+        conditionGrade:machine.conditionGrade,condition:machine.condition,accessories:machine.accessories,history:machine.history,
         sellerDescription:machine.description||''
       })
     }),

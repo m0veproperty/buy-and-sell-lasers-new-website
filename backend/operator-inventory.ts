@@ -1,4 +1,5 @@
 import {ApiError,Marketplace,text,type User} from './service.ts';
+import {categoriesForWordPress,conditionForWordPress,manufacturerForWordPress,type EquipmentCategory} from '../lib/equipment-taxonomy.ts';
 
 export type Classification = 'genuine'|'demo'|'unclassified';
 export type ListingContact = {name:string;email:string;phone:string;package:string;durationDays:number|null;expires:string|null};
@@ -14,9 +15,12 @@ export type WordPressMachine = {
   note:string;
   image?:string;
   contact?:ListingContact;
+  categories:EquipmentCategory[];
+  manufacturer:string;
+  conditionGrade:string;
 };
 
-type Snapshot = {capturedAt:string;machines:Omit<WordPressMachine,'classification'|'note'|'contact'>[]};
+type Snapshot = {capturedAt:string;machines:Omit<WordPressMachine,'classification'|'note'|'contact'|'categories'|'manufacturer'|'conditionGrade'>[]};
 
 function snapshot(){
   const raw=process.env.MARKETPLACE_WORDPRESS_INVENTORY;
@@ -35,6 +39,9 @@ export async function wordpressInventory(service:Marketplace,{includeContacts=tr
     const classification=byId.get(machine.id)?.label??(machine.source==='laser_market_form'?'genuine':'demo');
     return {
       ...machine,classification,
+      categories:categoriesForWordPress(machine.id,machine.title),
+      manufacturer:manufacturerForWordPress(machine.title),
+      conditionGrade:conditionForWordPress(machine.title),
       note:byId.get(machine.id)?.note??(machine.source==='laser_market_form'
         ?'Submitted through the Laser Market form.'
         :'No Laser Market form submission. Classified as a placeholder by the site owner’s rule.'),

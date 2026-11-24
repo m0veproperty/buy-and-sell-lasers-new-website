@@ -6,9 +6,10 @@ import {listingPackages,packageForPrice,quoteListingFee} from '../lib/listing-pa
 const scrypt=promisify(scryptCallback);
 export class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
 export type User={id:string;email:string;name:string};
-export type Machine={make:string;model:string;year:string;askingPrice:string;location:string;category:string;condition:string;accessories:string;history:string;description:string};
+export type Machine={make:string;model:string;year:string;askingPrice:string;location:string;category:string;conditionGrade:string;condition:string;accessories:string;history:string;description:string};
 type Row={id:string;owner_id:string;data:string;state:string;package_id:string|null;fee_pence:number|null;expires_at:number|null;created_at:number;updated_at:number};
-export const machineCategories=['Laser hair removal','Laser tattoo removal','IPL machines','All-in-one machines','Skin treatment','Slimming machines'];
+export const machineCategories=['Laser hair removal','Laser tattoo removal','IPL machines','All-in-one machines','Skin treatment','Slimming machines','Other equipment'];
+export const conditionGrades=['Used','Refurbished','Ex-demo','Not stated'] as const;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function text(value:unknown,label:string,max=2000,min=1) {
   if(typeof value!=='string'||value.trim().length<min||value.trim().length>max) throw new ApiError(400,`${label} must be ${min}–${max} characters.`);
@@ -18,6 +19,8 @@ export function email(value:unknown) {const s=text(value,'Email',254).toLowerCas
 export function validateMachine(input:Record<string,unknown>):Machine {
   const result={} as Machine;
   for(const k of ['make','model','year','askingPrice','location','category','condition','accessories','history','description'] as const)result[k]=text(input[k]??'',k,k==='condition'||k==='history'||k==='accessories'||k==='description'?2000:120,['accessories','history','description'].includes(k)?0:1);
+  if(input.conditionGrade!==undefined&&(!conditionGrades.includes(input.conditionGrade as typeof conditionGrades[number])))throw new ApiError(400,'Choose a valid condition grade.');
+  result.conditionGrade=(input.conditionGrade as Machine['conditionGrade']|undefined)??'Not stated';
   if(!machineCategories.includes(result.category))throw new ApiError(400,'Choose an equipment category.');
   if(!/^\d{4}$/.test(result.year)||Number(result.year)<1900||Number(result.year)>new Date().getFullYear())throw new ApiError(400,'Enter a valid model year.');
   if(!/^\d{1,8}(\.\d{1,2})?$/.test(result.askingPrice)||Number(result.askingPrice)<=0)throw new ApiError(400,'Enter a positive price with at most two decimal places.');

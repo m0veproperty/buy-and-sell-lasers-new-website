@@ -44,6 +44,9 @@ function MachineRow({machine,onSave}:{machine:WordPressMachine;onSave:(classific
     </div></td>
     <td><span className={'portal-badge '+machine.classification}>{labels[machine.classification]}</span></td>
     <td><span className={'portal-badge '+machine.status}>{machine.status==='publish'?'Published':'Draft'}</span></td>
+    <td>{machine.categories.join(', ')}</td>
+    <td>{machine.manufacturer}</td>
+    <td>{machine.conditionGrade==='Not stated'?<small>Not stated</small>:<span className="portal-badge">{machine.conditionGrade}</span>}</td>
     <td>{machine.classification==='genuine'&&contact?<>{contact.name&&<strong>{contact.name}</strong>}
       {contact.email&&<a className="portal-contact" href={'mailto:'+contact.email}>{contact.email}</a>}
       {contact.phone&&<a className="portal-contact" href={'tel:'+contact.phone}>{contact.phone}</a>}
@@ -103,7 +106,7 @@ export default function WordPressInventory({inventory}:{inventory:Inventory|null
       {!matches.length&&<p>No machines match these filters.</p>}
       <div className="portal-table-wrap">
         <table className="portal-table">
-          <thead><tr>{['Machine','Classification','Status','Seller contact','Listing period','Actions'].map(label=><th key={label} scope="col">{label}</th>)}</tr></thead>
+          <thead><tr>{['Machine','Classification','Status','Category','Manufacturer','Condition','Seller contact','Listing period','Actions'].map(label=><th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{matches.map(machine=><MachineRow key={machine.id} machine={machine} onSave={(classification,note)=>setUpdates(previous=>({...previous,[machine.id]:{classification,note}}))}/>)}</tbody>
         </table>
       </div>
