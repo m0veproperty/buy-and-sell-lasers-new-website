@@ -22,7 +22,8 @@ export async function homeMachines(service:Marketplace):Promise<HomeMachine[]>{
       href:featured?(example?.path??origin+'/?post_type=product&p='+machine.id):undefined,
       description:featured?example?.description:undefined,featured,
       spotlight:featured?example?.id:undefined,
-      manufacturer:example?.brand??machine.manufacturer,condition:machine.conditionGrade
+      manufacturer:example?.brand??machine.manufacturer,
+      condition:machine.conditionGrade==='Not stated'?example?.conditionGrade??'Not stated':machine.conditionGrade
     }];
   });
   const current:HomeMachine[]=native.map(item=>({
