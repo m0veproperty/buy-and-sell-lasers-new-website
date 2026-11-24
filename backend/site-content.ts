@@ -3,7 +3,7 @@ import {guides} from '@/lib/guides';
 import {listingPackages} from '@/lib/listing-packages';
 import type {Marketplace} from './service';
 
-export type SiteEntry={title:string;path:string;group:string;detail?:string};
+export type SiteEntry={title:string;path:string;group:string;detail?:string;keyword?:string};
 export type SiteContent={pages:SiteEntry[];posts:SiteEntry[]};
 
 const corePages:SiteEntry[]=[
@@ -29,6 +29,6 @@ export async function siteContent(service:Marketplace):Promise<SiteContent>{
       ...listings.map(listing=>({title:`${listing.brand} ${listing.name}`,path:listing.path,group:'Catalogue machines',detail:listing.year})),
       ...liveListings.map(listing=>({title:`${listing.data.make} ${listing.data.model}`,path:`/equipment/${listing.id}`,group:'Live seller listings',detail:listing.data.year})),
     ],
-    posts:guides.map(guide=>({title:guide.title,path:`/${guide.slug}/`,group:guide.tag,detail:guide.subtitle})),
+    posts:guides.map(guide=>({title:guide.title,path:`/${guide.slug}/`,group:guide.tag,detail:guide.subtitle,keyword:guide.keyword})),
   };
 }
