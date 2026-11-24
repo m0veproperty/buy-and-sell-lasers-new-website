@@ -10,7 +10,7 @@ export default function sitemap():MetadataRoute.Sitemap{
   return [
     ...pages.map(path=>({url:url(path)})),
     ...categories.map(category=>({url:url(category.path)})),
-    ...listings.map(listing=>({url:url(listing.path)})),
+    ...listings.filter(listing=>listing.id!=='vcombo').map(listing=>({url:url(listing.path)})),
     ...guides.map(guide=>({url:url(`/${guide.slug}/`),lastModified:guide.publishedAt?new Date(`${guide.publishedAt}T00:00:00Z`):undefined}))
   ];
 }
