@@ -39,7 +39,7 @@
 .portal input,.portal select,.portal textarea { width: 100%; min-width: 0; color: inherit; background: white; border: 1px solid var(--portal-line); border-radius: 7px; padding: 8px; font: inherit; }
 .portal-filters input { border: 0; }
 .portal-table-wrap { overflow-x: auto; }
-.portal-table { width: 100%; min-width: 880px; border-collapse: collapse; text-align: left; }
+.portal-table { width: 100%; min-width: 1240px; border-collapse: collapse; text-align: left; }
 .portal-table th { color: var(--portal-muted); background: #f3f6fa; font-size: 12px; }
 .portal-table th,.portal-table td { padding: 11px 9px; border-bottom: 1px solid var(--portal-line); vertical-align: top; }
 .portal-machine { display: flex; gap: 9px; align-items: center; min-width: 210px; }

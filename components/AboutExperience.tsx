@@ -1,0 +1,16 @@
+import {ArrowRight,ArrowUpRight,CheckCircle2,Layers3,MessageCircle,Search,ShieldCheck} from 'lucide-react';
+
+export default function AboutExperience({how=false}:{how?:boolean}){
+  return <div className="about-v2">
+    <section className="about-v2-hero"><div className="page-width"><nav className="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span>{how?'How it works':'About us'}</span></nav><p className="eyebrow">{how?'HOW IT WORKS':'ABOUT US'}</p><h1>{how?'A clearer way to':'Expertise for the'}<br/><em>{how?'buy and sell.':'aesthetic industry.'}</em></h1><p>A specialist marketplace connecting clinics, salons and professionals buying and selling pre-owned laser and aesthetic equipment.</p><div className="about-v2-actions"><a className="action" href="/shop/">Explore equipment <ArrowRight size={17}/></a><a href="#about-approach">How it works <ArrowUpRight size={16}/></a></div></div></section>
+    <div className="about-v2-benefits page-width"><div><ShieldCheck/><span><strong>Clear information</strong><small>Review the seller’s details</small></span></div><div><Layers3/><span><strong>Compare equipment</strong><small>Models, photos and history</small></span></div><div><MessageCircle/><span><strong>Direct conversations</strong><small>Speak with the seller</small></span></div></div>
+    <section className="page-width about-v2-story"><img src="/images/editorial-clinic.webp" alt="Illustrative professional treatment room with aesthetic equipment" width="1400" height="933"/><div><p className="eyebrow">WHO WE ARE</p><h2>A dedicated marketplace for clinics and professionals.</h2><p>We bring equipment and buyers together in one place, with practical guides and space for sellers to explain the exact machine they are offering.</p><p>Compare photographs, asking prices and the details provided. Ask about condition, service history and included accessories before making an agreement.</p><p>Buyers and sellers arrange inspection, payment and handover directly. Listing details are supplied by sellers and should be checked independently.</p></div></section>
+    <section id="about-approach" className="page-width about-v2-approach"><div className="about-v2-heading"><div><p className="eyebrow">OUR APPROACH</p><h2>A simple, informed process.</h2></div><p>Good decisions start with clear facts and useful questions.</p></div><div className="about-v2-steps">{[
+      [Search,'Discover','Browse categories and compare the equipment available.'],
+      [ShieldCheck,'Check','Review photographs and ask for records, configuration and known faults.'],
+      [MessageCircle,'Connect','Contact the seller to discuss inspection, collection and the sale.'],
+      [CheckCircle2,'Prepare','Keep the agreed equipment and handover details in writing.']
+    ].map(([Icon,title,body],index)=>{const I=Icon as typeof Search;return <article key={String(title)}><span>0{index+1}</span><I size={25}/><h3>{String(title)}</h3><p>{String(body)}</p></article>})}</div></section>
+    <section className="page-width about-v2-mission"><div><p className="eyebrow">OUR PURPOSE</p><h2>To keep your clinic moving forward.</h2><p>Useful equipment deserves clear information and a closer look.</p><a href="/shop/">Browse equipment <ArrowRight size={17}/></a></div></section>
+  </div>;
+}

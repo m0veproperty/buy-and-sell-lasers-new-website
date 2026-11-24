@@ -151,6 +151,7 @@ export default function OperatorListings(){
             return <article className="portal-new-row" key={listing.id}>
               <PortalThumbnail src={listing.photos[0]&&'/api/marketplace/photos/'+listing.photos[0]}/>
               <div><h3>{listing.data.make} {listing.data.model}</h3><p>{listing.data.year} · {listing.data.category} · £{listing.data.askingPrice}</p>
+              <p>Manufacturer: {listing.data.make} · Condition: {listing.data.conditionGrade||'Not stated'}</p>
               <p>{listing.sellerName} · <a href={'mailto:'+listing.sellerEmail}>{listing.sellerEmail}</a></p>
               <p>{pack?pack.name+' · '+pack.durationDays+' days':'Duration unavailable'}{listing.expiresAt&&' · Ends '+new Date(listing.expiresAt).toLocaleDateString('en-GB',{timeZone:'Europe/London'})}</p>
               {listing.flags.length>0&&<ul>{listing.flags.map(flag=><li key={flag}>{flag}</li>)}</ul>}

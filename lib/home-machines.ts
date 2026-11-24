@@ -9,4 +9,6 @@ export type HomeMachine = {
   description?:string;
   featured:boolean;
   spotlight?:string;
+  manufacturer?:string;
+  condition?:string;
 };
