@@ -81,6 +81,8 @@
 .portal-content-row small { display: block; overflow-wrap: anywhere; }
 .portal-content-row a { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .portal-content-group { display: inline-block; margin-bottom: 3px; color: #52647a; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.portal-content-keyword { color: #2e5078; font-size: 13px; }
+.portal-content-keyword strong { font-weight: 700; }
 @media(max-width: 600px) {
   .portal-content-filters { grid-template-columns: 1fr; }
   .portal-content-row { align-items: flex-start; }

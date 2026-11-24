@@ -35,8 +35,9 @@
   .about-v2-steps{grid-template-columns:repeat(2,1fr)}
   .guide-v2-hero{background-size:auto 80%}
   .guide-v2-hero:before{background:#edf5ffe0}
-  .guide-v2-layout{display:block}
-  .guide-v2-layout aside{position:static;margin-bottom:27px}
+  .guide-v2-layout{display:flex;flex-direction:column}
+  .guide-v2-layout article{order:0}
+  .guide-v2-layout aside{order:1;position:static;margin:27px 0 0;width:100%}
   .guide-v2-toc{display:none}
   .guide-v2-help{margin-top:0}
   .product-v2-top,.product-v2-detail,.product-v2-enquiry{display:block}
