@@ -85,7 +85,7 @@
 .homepage-refresh .enquiry-heading h2 { font-size: clamp(37px,4.2vw,64px); line-height: 1.06; margin-top: 22px; letter-spacing: -.055em; }
 .homepage-refresh .enquiry-heading h2 em { color: #0759ef; font-weight: inherit; display: inline-block; }
 .homepage-refresh .enquiry-heading > div > p:not(.eyebrow) { color: var(--studio-copy); font-size: 1.125rem; line-height: 1.7; max-width: 650px; margin-top: 24px; }
-.homepage-refresh .enquiry-art { height: 270px; position: relative; align-self: end; overflow: hidden; }
+.homepage-refresh .enquiry-art { height: 270px; position: relative; align-self: end; }
 .homepage-refresh .enquiry-art > img { position: absolute; width: 280px; height: 420px; object-fit: contain; right: 0; top: 0; transform: rotate(5deg); }
 .homepage-refresh .enquiry-art .studio-halo { width: 330px; top: 35px; right: -25px; }
 .homepage-refresh .confidence-note { position: absolute; z-index: 2; top: 85px; left: 0; display: flex; align-items: center; gap: 15px; padding: 20px; background: #eaf3ffed; border: 1px solid #ffffffd9; border-radius: 20px; box-shadow: 0 12px 35px #5483c012; }
@@ -189,7 +189,7 @@
  .homepage-refresh .seller-showcase-steps p { font-size: 1rem; }
  .homepage-refresh .enquiry-heading { grid-template-columns: 1fr; gap: 0; }
  .homepage-refresh .enquiry-heading > div:first-child { max-width: 650px; }
- .homepage-refresh .enquiry-art { height: 230px; margin-top: 25px; width: 100%; max-width: 550px; justify-self: center; }
+ .homepage-refresh .enquiry-art { height: 230px; margin-top: 25px; width: 100%; overflow: hidden; max-width: 550px; justify-self: center; }
  .homepage-refresh .enquiry-art > img { right: 20px; width: 270px; height: 405px; top: -10px; }
  .homepage-refresh .enquiry-art .studio-halo { right: -10px; top: 0; }
  .homepage-refresh .confidence-note { left: 0; top: 65px; }
