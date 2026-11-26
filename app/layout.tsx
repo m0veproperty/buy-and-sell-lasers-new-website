@@ -13,6 +13,7 @@ import './seller.css';
 import './editorial-refresh.css';
 import './product-refresh.css';
 import './editorial-responsive.css';
+import './category-refresh.css';
 export const metadata: Metadata = {
  metadataBase: new URL(process.env.SITE_URL||'https://buy-and-sell-lasers-new-website.vercel.app'),
  title: 'Buy & Sell Lasers | Your next laser. A clearer choice.',
