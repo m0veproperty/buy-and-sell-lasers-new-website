@@ -1,0 +1,2 @@
+export const metadata = {robots: {index: false, follow: false}};
+export default function Review(){return <main style={{padding:20,background:'#dbe4f1',minHeight:'100vh'}}><h1 style={{fontSize:22,marginBottom:14}}>Responsive design check</h1><div style={{display:'flex',gap:24,alignItems:'start'}}>{[390,768].map(width=><section key={width}><h2 style={{fontSize:18,marginBottom:10}}>{width}px viewport</h2><iframe title={`${width}px homepage`} src="/#home.sell" style={{width,height:844,border:'1px solid #869bb8',background:'white'}}/></section>)}</div></main>}
