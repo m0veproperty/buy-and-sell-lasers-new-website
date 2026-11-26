@@ -58,7 +58,7 @@ export default function BeamAtmosphere({tone = 'light'}: {tone?: 'light' | 'dark
               vec3 blue = mix(vec3(.035,.29,.90), vec3(.18,.55,1.0), uv.x);
               vec3 cyan = mix(vec3(.18,.46,1.0), vec3(.30,.88,1.0), uv.x);
               vec3 color = mix(blue, cyan, uDark);
-              float fade = smoothstep(0.0,.12,uv.x) * smoothstep(1.0,.84,uv.x);
+              float fade = smoothstep(0.0,.12,uv.x) * (1.0 - smoothstep(.84,1.0,uv.x));
               float alpha = (beams + glow + halo) * mix(.55,.86,uDark) * fade;
               gl_FragColor = vec4(color, clamp(alpha, 0.0, .8));
             }`,

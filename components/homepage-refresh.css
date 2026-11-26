@@ -85,7 +85,7 @@
 .homepage-refresh .enquiry-heading h2 { font-size: clamp(37px,4.2vw,64px); line-height: 1.06; margin-top: 22px; letter-spacing: -.055em; }
 .homepage-refresh .enquiry-heading h2 em { color: #0759ef; font-weight: inherit; display: inline-block; }
 .homepage-refresh .enquiry-heading > div > p:not(.eyebrow) { color: var(--studio-copy); font-size: 1.125rem; line-height: 1.7; max-width: 650px; margin-top: 24px; }
-.homepage-refresh .enquiry-art { height: 270px; position: relative; align-self: end; }
+.homepage-refresh .enquiry-art { height: 270px; position: relative; align-self: end; overflow: hidden; }
 .homepage-refresh .enquiry-art > img { position: absolute; width: 280px; height: 420px; object-fit: contain; right: 0; top: 0; transform: rotate(5deg); }
 .homepage-refresh .enquiry-art .studio-halo { width: 330px; top: 35px; right: -25px; }
 .homepage-refresh .confidence-note { position: absolute; z-index: 2; top: 85px; left: 0; display: flex; align-items: center; gap: 15px; padding: 20px; background: #eaf3ffed; border: 1px solid #ffffffd9; border-radius: 20px; box-shadow: 0 12px 35px #5483c012; }
@@ -93,7 +93,7 @@
 .homepage-refresh .confidence-note strong { font-size: 1.05rem; letter-spacing: -.02em; }
 .homepage-refresh .confidence-note p { font-size: .9rem; line-height: 1.5; color: var(--studio-copy); margin-top: 6px; }
 .homepage-refresh .enquiry-layout { position: relative; z-index: 3; grid-template-columns: 1.05fr 1fr; gap: 40px; margin-top: 35px; align-items: start; }
-.homepage-refresh .enquiry-selected { border: 1px solid #d5e3f6; border-radius: 18px; background: #ffffffba; padding: 16px 18px; gap: 17px; }
+.homepage-refresh .enquiry-selected { border: 1px solid #d5e3f6; border-radius: 18px; background: #fff; padding: 16px 18px; gap: 17px; }
 .homepage-refresh .enquiry-selected > img { width: 72px; height: 82px; object-fit: cover; border-radius: 11px; }
 .homepage-refresh .enquiry-selected .micro-label { font-size: .7rem; letter-spacing: .14em; color: #58709a; }
 .homepage-refresh .enquiry-selected h3 { font-size: clamp(20px,1.7vw,25px); line-height: 1.2; margin-top: 8px; letter-spacing: -.035em; }
@@ -114,7 +114,7 @@
 .homepage-refresh .custom-question { font-size: 1.1rem; font-weight: 600; margin-top: 25px; }
 .homepage-refresh .custom-question textarea { border: 1px solid #d2def1; border-radius: 14px; background: #ffffffd9; padding: 16px 18px; min-height: 68px; font-size: 1rem; line-height: 1.5; font-weight: 400; margin-top: 12px; box-shadow: 0 2px 5px #264f8c07; }
 .homepage-refresh .custom-question textarea::placeholder { color: #6680a3; }
-.homepage-refresh .enquiry-document { border: 1px solid #dce7f8; border-radius: 22px; background: #ffffffed; box-shadow: 0 24px 50px #3563ad1a; overflow: hidden; }
+.homepage-refresh .enquiry-document { border: 1px solid #dce7f8; border-radius: 22px; background: #fff; box-shadow: 0 24px 50px #3563ad1a; overflow: hidden; }
 .homepage-refresh .enquiry-document::before { display: none; }
 .homepage-refresh .document-header { background: linear-gradient(105deg,#0c3268,#122349); color: white; padding: 22px 25px; font-size: .65rem; letter-spacing: .16em; border: 0; align-items: center; gap: 15px; }
 .homepage-refresh .document-header > span:first-child { display: flex; align-items: center; gap: 10px; }
